@@ -48,3 +48,23 @@ forge verify-contract <ADDRESS> src/MODAOToken.sol:MODAOToken \
   --verifier-url https://sourcify-api-monad.blockvision.org \
   --chain 10143
 ```
+
+## Redeploy MODAOGovernor only
+
+After changes to `MODAOGovernor.sol` you can redeploy *just the governor* against the existing token + oracle deployment. Agents stay registered; no need to re-run the full deploy.
+
+Run from `contracts/`, with the same keystore and `--sender` as the original deploy:
+
+```bash
+forge script script/RedeployGovernor.s.sol:RedeployGovernorScript \
+    --rpc-url monad_testnet \
+    --account myWallet \
+    --sender 0x37960C65118a5263fb880f105663Fd4f29aA15de \
+    --broadcast \
+    -vv
+```
+
+Notes:
+- `--verify` is omitted because Monad testnet's etherscan-compatible endpoint flakes during broadcast lookups. Verify after deploy with `forge verify-contract` (snippet above).
+- The script pins the existing `MODAOToken`, `MockUSDC`, and `AISwarmOracle` addresses internally. If those ever change, edit `script/RedeployGovernor.s.sol`.
+- After it succeeds, update `deployments/monad-testnet.json` with the new governor address.

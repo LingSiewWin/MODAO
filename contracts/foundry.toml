@@ -13,5 +13,6 @@ evm_version = "cancun"
 [rpc_endpoints]
 monad_testnet = "https://testnet-rpc.monad.xyz"
 
-[etherscan]
-monad_testnet = { key = "${MONAD_EXPLORER_API_KEY}", url = "https://testnet.monadexplorer.com/api" }
+# Verification uses Sourcify (see DEPLOY.md). The etherscan block was removed
+# because Monad testnet's explorer doesn't expose an etherscan-compatible API
+# and foundry's transparent lookup during broadcast was returning HTML.

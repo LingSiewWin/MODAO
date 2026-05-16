@@ -6,14 +6,28 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {AISwarmOracle} from "./AISwarmOracle.sol";
 import {ConditionalVault} from "./ConditionalVault.sol";
 import {ProposalAMM} from "./ProposalAMM.sol";
+import {ProjectToken} from "./ProjectToken.sol";
 
 /// @title MODAOGovernor
-/// @notice Orchestrates the futarchy lifecycle:
+/// @notice Orchestrates the futarchy launchpad lifecycle:
 ///         Submitted → MarketsOpen → Finalized.
-///         On submit, proposer locks a bond (MODAO + USDC). The bond is split into both
-///         a PASS pool and a FAIL pool via conditional vaults. After TWAP_WINDOW seconds,
-///         anyone can finalize; the higher-TWAP side wins. On PASS, a ProjectLaunched event
-///         carries the project metadata (the hackathon-MVP stand-in for LaunchFactory).
+///
+/// @dev On AI-accept the governor deploys a fresh `ProjectToken` ERC20 for the
+///      proposal and opens conditional markets denominated in PROJECT/USDC —
+///      mirroring MetaDAO's fundraise model. MODAO is *not* in any trading pair;
+///      it's the protocol token (anti-spam bond + protocol-fee target).
+///
+///      Capital flow:
+///        - Proposer pays BOND_MODAO (anti-spam, held in governor) +
+///          BOND_USDC (seeds initial USDC-side liquidity).
+///        - Governor mints full project supply, splits it into pass/fail
+///          conditional tokens, and seeds both AMMs with half each.
+///        - During the market window anyone can deposit USDC into the USDC
+///          conditional vault and trade pass/fail tokens on the AMMs.
+///        - After TWAP_WINDOW, finalize() reads both pool TWAPs; higher wins.
+///        - On PASS, ProjectLaunched fires (post-MVP: pass_USDC redeems to
+///          real USDC for the project, pass_PROJECT redeems to real PROJECT
+///          for depositors).
 contract MODAOGovernor {
     using SafeERC20 for IERC20;
 
@@ -35,7 +49,8 @@ contract MODAOGovernor {
         address proposer;
         Status status;
         ConditionalVault.Outcome outcome;
-        ConditionalVault modaoVault;
+        address projectToken; // ERC20 deployed at market-open
+        ConditionalVault projectVault;
         ConditionalVault usdcVault;
         ProposalAMM passAmm;
         ProposalAMM failAmm;
@@ -48,19 +63,29 @@ contract MODAOGovernor {
     error UnknownProposal();
     error WrongStatus();
     error TWAPWindowNotElapsed();
+    error InvalidSpec();
 
     event ProposalSubmitted(uint256 indexed proposalId, address indexed proposer, string name, string symbol);
     event MarketsOpened(
-        uint256 indexed proposalId, address modaoVault, address usdcVault, address passAmm, address failAmm
+        uint256 indexed proposalId,
+        address projectToken,
+        address projectVault,
+        address usdcVault,
+        address passAmm,
+        address failAmm
     );
-    event ProposalFinalized(uint256 indexed proposalId, ConditionalVault.Outcome outcome, uint256 passTwap, uint256 failTwap);
-    event ProjectLaunched(uint256 indexed proposalId, string name, string symbol, uint256 supply, string descriptionURI);
+    event ProposalFinalized(
+        uint256 indexed proposalId, ConditionalVault.Outcome outcome, uint256 passTwap, uint256 failTwap
+    );
+    event ProjectLaunched(uint256 indexed proposalId, address projectToken, string name, string symbol, uint256 supply, string descriptionURI);
 
     IERC20 public immutable modao;
     IERC20 public immutable usdc;
     AISwarmOracle public immutable oracle;
 
+    /// @dev MODAO anti-spam bond. Sits in the governor; slash/refund per outcome is roadmap.
     uint256 public constant BOND_MODAO = 100e18;
+    /// @dev USDC seed for initial AMM liquidity on the USDC side of both pools.
     uint256 public constant BOND_USDC = 100e6;
     uint256 public constant TWAP_WINDOW = 3 hours;
 
@@ -75,6 +100,10 @@ contract MODAOGovernor {
 
     /// @notice Submit a proposal. Pulls BOND_MODAO + BOND_USDC from the proposer.
     function submitProposal(ProjectSpec calldata spec) external returns (uint256 proposalId) {
+        if (spec.supply == 0 || bytes(spec.name).length == 0 || bytes(spec.symbol).length == 0) {
+            revert InvalidSpec();
+        }
+
         proposalId = ++proposalCount;
         Proposal storage p = _proposals[proposalId];
         p.proposer = msg.sender;
@@ -87,7 +116,8 @@ contract MODAOGovernor {
         emit ProposalSubmitted(proposalId, msg.sender, spec.name, spec.symbol);
     }
 
-    /// @notice Forward an AI-swarm verdict bundle to the oracle. On accept, markets open.
+    /// @notice Forward an AI-swarm verdict bundle to the oracle. On accept, deploy
+    ///         the project token and open the conditional markets.
     function submitVerdictAndOpen(
         uint256 proposalId,
         uint256 score,
@@ -104,30 +134,43 @@ contract MODAOGovernor {
     function _openMarkets(uint256 proposalId) internal {
         Proposal storage p = _proposals[proposalId];
 
-        ConditionalVault modaoVault = new ConditionalVault(modao, address(this), "MODAO", proposalId);
+        // 1. Deploy the project's ERC20 with the proposer's name/symbol/supply.
+        ProjectToken project = new ProjectToken(p.spec.name, p.spec.symbol, p.spec.supply, address(this));
+        p.projectToken = address(project);
+
+        // 2. Conditional vaults: one for the project token, one for USDC.
+        ConditionalVault projectVault = new ConditionalVault(IERC20(address(project)), address(this), p.spec.symbol, proposalId);
         ConditionalVault usdcVault = new ConditionalVault(usdc, address(this), "USDC", proposalId);
 
-        modao.forceApprove(address(modaoVault), BOND_MODAO);
+        // 3. Deposit full project supply -> mint p+f project tokens to governor.
+        IERC20(address(project)).forceApprove(address(projectVault), p.spec.supply);
+        projectVault.deposit(p.spec.supply);
+
+        // 4. Deposit USDC bond -> mint p+f USDC to governor.
         usdc.forceApprove(address(usdcVault), BOND_USDC);
-        modaoVault.deposit(BOND_MODAO);
         usdcVault.deposit(BOND_USDC);
 
-        ProposalAMM passAmm = new ProposalAMM(IERC20(address(modaoVault.passToken())), IERC20(address(usdcVault.passToken())));
-        ProposalAMM failAmm = new ProposalAMM(IERC20(address(modaoVault.failToken())), IERC20(address(usdcVault.failToken())));
+        // 5. Deploy AMM pairs: pass_PROJECT/pass_USDC and fail_PROJECT/fail_USDC.
+        ProposalAMM passAmm = new ProposalAMM(
+            IERC20(address(projectVault.passToken())), IERC20(address(usdcVault.passToken()))
+        );
+        ProposalAMM failAmm = new ProposalAMM(
+            IERC20(address(projectVault.failToken())), IERC20(address(usdcVault.failToken()))
+        );
 
-        // Split conditional tokens equally between the two pools.
-        uint256 halfM = BOND_MODAO / 2;
-        uint256 halfU = BOND_USDC / 2;
+        // 6. Seed each pool with half the conditional supply on each side.
+        uint256 halfProject = p.spec.supply / 2;
+        uint256 halfUsdc = BOND_USDC / 2;
 
-        IERC20(address(modaoVault.passToken())).forceApprove(address(passAmm), halfM);
-        IERC20(address(usdcVault.passToken())).forceApprove(address(passAmm), halfU);
-        passAmm.addLiquidity(halfM, halfU, address(this));
+        IERC20(address(projectVault.passToken())).forceApprove(address(passAmm), halfProject);
+        IERC20(address(usdcVault.passToken())).forceApprove(address(passAmm), halfUsdc);
+        passAmm.addLiquidity(halfProject, halfUsdc, address(this));
 
-        IERC20(address(modaoVault.failToken())).forceApprove(address(failAmm), halfM);
-        IERC20(address(usdcVault.failToken())).forceApprove(address(failAmm), halfU);
-        failAmm.addLiquidity(halfM, halfU, address(this));
+        IERC20(address(projectVault.failToken())).forceApprove(address(failAmm), halfProject);
+        IERC20(address(usdcVault.failToken())).forceApprove(address(failAmm), halfUsdc);
+        failAmm.addLiquidity(halfProject, halfUsdc, address(this));
 
-        p.modaoVault = modaoVault;
+        p.projectVault = projectVault;
         p.usdcVault = usdcVault;
         p.passAmm = passAmm;
         p.failAmm = failAmm;
@@ -136,7 +179,7 @@ contract MODAOGovernor {
         (p.failCumulativeAtStart,) = failAmm.snapshotCumulative();
         p.status = Status.MarketsOpen;
 
-        emit MarketsOpened(proposalId, address(modaoVault), address(usdcVault), address(passAmm), address(failAmm));
+        emit MarketsOpened(proposalId, address(project), address(projectVault), address(usdcVault), address(passAmm), address(failAmm));
     }
 
     /// @notice Read TWAP from both pools and finalize. Higher TWAP wins.
@@ -151,14 +194,14 @@ contract MODAOGovernor {
         ConditionalVault.Outcome outcome =
             passTwap >= failTwap ? ConditionalVault.Outcome.Pass : ConditionalVault.Outcome.Fail;
 
-        p.modaoVault.finalize(outcome);
+        p.projectVault.finalize(outcome);
         p.usdcVault.finalize(outcome);
         p.outcome = outcome;
         p.status = Status.Finalized;
 
         emit ProposalFinalized(proposalId, outcome, passTwap, failTwap);
         if (outcome == ConditionalVault.Outcome.Pass) {
-            emit ProjectLaunched(proposalId, p.spec.name, p.spec.symbol, p.spec.supply, p.spec.descriptionURI);
+            emit ProjectLaunched(proposalId, p.projectToken, p.spec.name, p.spec.symbol, p.spec.supply, p.spec.descriptionURI);
         }
     }
 
