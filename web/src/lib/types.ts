@@ -19,7 +19,13 @@ export interface Proposal {
 
 export interface Market {
   id: string;
-  name: string;
+  /** Parent proposal — the market only exists in that context. The pool
+   *  technically trades conditional-MODAO against conditional-USDC; what
+   *  varies between markets is *which proposal* the conditional is gated on. */
+  proposalId: string;
+  /** Which side of the conditional market: pass | fail. */
+  side: "pass" | "fail";
+  /** AMM contract address. */
   address: string;
   baseDecimals: number;
   quoteDecimals: number;

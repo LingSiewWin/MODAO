@@ -77,7 +77,8 @@ export const MOCK_PROPOSALS: Proposal[] = [
 export const MOCK_MARKETS: Market[] = [
   {
     id: "mkt_hyperlend_pass",
-    name: "HYPERLEND-PASS / USDC",
+    proposalId: "prop_001",
+    side: "pass",
     address: "0xMKT1A1B2C3D4E5F6789012345678901234567890",
     baseDecimals: 18,
     quoteDecimals: 6,
@@ -86,7 +87,8 @@ export const MOCK_MARKETS: Market[] = [
   },
   {
     id: "mkt_hyperlend_fail",
-    name: "HYPERLEND-FAIL / USDC",
+    proposalId: "prop_001",
+    side: "fail",
     address: "0xMKT2B2C3D4E5F6789012345678901234567890AB",
     baseDecimals: 18,
     quoteDecimals: 6,
@@ -95,12 +97,23 @@ export const MOCK_MARKETS: Market[] = [
   },
   {
     id: "mkt_pulse_pass",
-    name: "PULSE-PASS / USDC",
+    proposalId: "prop_002",
+    side: "pass",
     address: "0xMKT3C3D4E5F6789012345678901234567890ABCD",
     baseDecimals: 18,
     quoteDecimals: 6,
     twap: 0.481,
     volume24h: 41_200,
+  },
+  {
+    id: "mkt_pulse_fail",
+    proposalId: "prop_002",
+    side: "fail",
+    address: "0xMKT4D4E5F6789012345678901234567890ABCDEF",
+    baseDecimals: 18,
+    quoteDecimals: 6,
+    twap: 0.519,
+    volume24h: 38_900,
   },
 ];
 

@@ -1,26 +1,50 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { truncateAddress, formatUsd } from "@/lib/utils";
+import { formatUsd, cn } from "@/lib/utils";
+import { MOCK_PROPOSALS } from "@/lib/mock-data";
 import type { Market } from "@/lib/types";
 
+/**
+ * Compact row for the /markets listing.
+ *
+ * The market is shown *as a side of its parent proposal* — project name
+ * leads, side is a coloured badge, and the AMM address is reduced to a
+ * tertiary mono caption. Avoids the "looks like a token pair" framing.
+ */
 export function MarketCard({ market }: { market: Market }) {
-  const isPass = market.name.includes("PASS");
+  const parent = MOCK_PROPOSALS.find((p) => p.id === market.proposalId);
+  const projectName = parent
+    ? parent.title.replace(/^Launch /, "").replace(/ on MoDAO$/, "")
+    : market.proposalId;
+
+  const isPass = market.side === "pass";
+  const sideTone = isPass ? "text-success" : "text-danger";
+
   return (
     <Link href={`/markets/${market.id}`} className="block group">
       <Card interactive className="p-5">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex items-center gap-3">
             <span
-              className="size-2 rounded-full shrink-0"
-              style={{ background: isPass ? "var(--success)" : "var(--danger)" }}
+              className={cn(
+                "size-2 rounded-full shrink-0",
+                isPass ? "bg-success" : "bg-danger",
+              )}
             />
             <div className="min-w-0">
-              <h3 className="font-mono text-sm text-fg group-hover:text-brand-3 transition-colors truncate">
-                {market.name}
-              </h3>
-              <p className="text-[11px] font-mono text-faint mt-0.5">
-                {truncateAddress(market.address)}
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-fg group-hover:text-brand-3 transition-colors truncate">
+                  {projectName}
+                </h3>
+                <span className={cn("text-[10px] font-semibold uppercase tracking-widest", sideTone)}>
+                  {isPass ? "PASS" : "FAIL"}
+                </span>
+              </div>
+              <p className="text-[11px] text-faint mt-0.5">
+                {parent
+                  ? `Proposal #${parent.number} · ${isPass ? "trades up if admitted" : "trades up if rejected"}`
+                  : "Conditional MODAO / USDC"}
               </p>
             </div>
           </div>

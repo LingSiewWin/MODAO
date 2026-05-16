@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { MarketCard } from "@/components/markets/MarketCard";
-import { MOCK_MARKETS } from "@/lib/mock-data";
+import { MOCK_MARKETS, MOCK_PROPOSALS } from "@/lib/mock-data";
 
 export default function MarketsPage() {
   const [query, setQuery] = useState("");
@@ -11,11 +11,15 @@ export default function MarketsPage() {
   const markets = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return MOCK_MARKETS;
-    return MOCK_MARKETS.filter(
-      (m) =>
-        m.name.toLowerCase().includes(q) ||
-        m.address.toLowerCase().includes(q),
-    );
+    return MOCK_MARKETS.filter((m) => {
+      const parent = MOCK_PROPOSALS.find((p) => p.id === m.proposalId);
+      const projectName = parent?.title.toLowerCase() ?? "";
+      return (
+        projectName.includes(q) ||
+        m.address.toLowerCase().includes(q) ||
+        m.side.includes(q)
+      );
+    });
   }, [query]);
 
   return (

@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@base-org/account": "^2.5.6",
+    "@coinbase/wallet-sdk": "^4.3.7",
     "@modao/shared": "workspace:*",
     "@rainbow-me/rainbowkit": "latest",
     "@tanstack/react-query": "latest",
@@ -17,6 +19,7 @@
     "framer-motion": "^11.11.0",
     "lucide-react": "^0.460.0",
     "next": "15.0.0",
+    "porto": "^0.2.37",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "tailwind-merge": "^2.5.0",

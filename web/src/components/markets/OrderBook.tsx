@@ -24,7 +24,7 @@ export function OrderBook({
   const askBg = side === "pass" ? "bg-success/10" : "bg-danger/10";
 
   const spread =
-    asks.length && bids.length ? asks[asks.length - 1].price - bids[0].price : 0;
+    asks.length && bids.length ? asks[asks.length - 1]!.price - bids[0]!.price : 0;
 
   return (
     <div className={cn("text-xs font-mono tabular", className)}>

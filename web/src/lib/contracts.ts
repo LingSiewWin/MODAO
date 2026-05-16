@@ -280,6 +280,13 @@ export const conditionalVaultAbi = [
   },
   {
     type: "function",
+    name: "merge",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "redeem",
     inputs: [{ name: "amount", type: "uint256" }],
     outputs: [],
