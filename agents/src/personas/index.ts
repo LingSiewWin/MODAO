@@ -1,22 +1,18 @@
-import type { Persona } from "./_types.js";
-import { tokenomicsAnalyst } from "./tokenomicsAnalyst.js";
-import { scamDetector } from "./scamDetector.js";
-import { teamReviewer } from "./teamReviewer.js";
-import { productAnalyst } from "./productAnalyst.js";
-import { marketAnalyst } from "./marketAnalyst.js";
-
 /**
- * The five-persona swarm. Order matters: PERSONAS[i] is voiced by the agent whose
- * private key is deriveAgentAccount(i). Don't reorder without coordinating with
- * the on-chain agent set in the oracle.
+ * Public API for the agent panel.
+ *
+ *   PANEL          — the 4 model brains (name + slug each)
+ *   callModel      — call one panel member with the shared 4-rubric prompt
+ *   PanelVerdict   — structured output shape (origin/novelty/tech/demo each {score, reasoning})
+ *   RUBRIC_KEYS    — ["origin","novelty","tech","demo"] in canonical order
+ *
+ * The previous `PERSONAS` array (one persona per rubric) is retired —
+ * Option B architecture: every member evaluates every rubric, cross-checked
+ * via per-rubric mean across members.
  */
-export const PERSONAS: readonly Persona[] = [
-  tokenomicsAnalyst,
-  scamDetector,
-  teamReviewer,
-  productAnalyst,
-  marketAnalyst,
-] as const;
-
-export type { Persona, PersonaVerdict } from "./_types.js";
-export { callClaude } from "./_callClaude.js";
+export { PANEL } from "./panel.js";
+export type { PanelMember } from "./panel.js";
+export { callModel } from "./_callModel.js";
+export type { PanelCallResult } from "./_callModel.js";
+export { RUBRIC_KEYS } from "./rubric.js";
+export type { PanelVerdict, RubricKey } from "./rubric.js";
