@@ -1,19 +1,27 @@
 // Shared types, constants, ABIs, and deployment addresses for the MODAO monorepo.
 // Imported by agents/ and web/. Single source of truth: deployments/monad-testnet.json.
 
+import { getAddress } from "viem";
 import deployment from "../../../deployments/monad-testnet.json" with { type: "json" };
 
 export const MONAD_TESTNET_CHAIN_ID = 10143 as const;
 export const MONAD_TESTNET_RPC = deployment.rpcUrl;
 
-export const ADDRESSES = deployment.contracts as {
-  MODAOToken: `0x${string}`;
-  MockUSDC: `0x${string}`;
-  AISwarmOracle: `0x${string}`;
-  MODAOGovernor: `0x${string}`;
-};
+/**
+ * Normalize every deployed address through viem's `getAddress` so checksum
+ * casing in deployments/monad-testnet.json doesn't trip strict consumers.
+ */
+const raw = deployment.contracts;
+export const ADDRESSES = {
+  MODAOToken: getAddress(raw.MODAOToken),
+  MockUSDC: getAddress(raw.MockUSDC),
+  AISwarmOracle: getAddress(raw.AISwarmOracle),
+  MODAOGovernor: getAddress(raw.MODAOGovernor),
+} as const;
 
-export const AGENT_ADDRESSES = deployment.agents.addresses as readonly `0x${string}`[];
+export const AGENT_ADDRESSES = deployment.agents.addresses.map((a) =>
+  getAddress(a),
+) as readonly `0x${string}`[];
 export const AGENT_SEED = "modao-agent" as const;
 
 export const ORACLE_THRESHOLD = deployment.constants.ORACLE_THRESHOLD;
