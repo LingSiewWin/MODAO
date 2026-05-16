@@ -68,8 +68,9 @@ export function useProposal(id: string | undefined) {
     query: { enabled },
   });
 
-  const proposal = data ? shapeProposal(numeric, data as unknown as OnchainProposal) : null;
-  return { proposal, isLoading };
+  const raw = data ? (data as unknown as OnchainProposal) : null;
+  const proposal = raw ? shapeProposal(numeric, raw) : null;
+  return { proposal, raw, isLoading };
 }
 
 function shapeProposal(id: bigint, raw: OnchainProposal): Proposal {

@@ -2,19 +2,21 @@
 
 import Link from "next/link";
 import { use } from "react";
+import { zeroAddress } from "viem";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StateBadge } from "@/components/ui/Badge";
 import { ProposalCountdown } from "@/components/proposals/ProposalCountdown";
 import { AgentVerdictPanel } from "@/components/proposals/AgentVerdictPanel";
+import { CommitPanel } from "@/components/proposals/CommitPanel";
 import { useProposal } from "@/hooks/use-proposals";
 import { MOCK_PROPOSALS } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
 /**
  * Proposal detail page (v3 — commit-ICO model).
- * Slices 3 + 4 will plug useProposalSale + CommitPanel here. For now this
- * slice keeps the page compilable with status + metadata only.
+ * Shows AI verdict, the LaunchSale interaction panel, and a post-launch
+ * governance CTA once the project has launched.
  */
 export default function ProposalDetailPage({
   params,
@@ -22,7 +24,7 @@ export default function ProposalDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { proposal: onchain, isLoading } = useProposal(id);
+  const { proposal: onchain, raw, isLoading } = useProposal(id);
   const fallback = MOCK_PROPOSALS.find((p) => p.id === id);
   const proposal = onchain ?? fallback;
 
@@ -121,17 +123,34 @@ export default function ProposalDetailPage({
                   : "pending"
             }
           />
-          <Card className="p-5">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-faint mb-3">
-              Launch sale
-            </h2>
-            <p className="text-sm text-muted leading-relaxed">
-              The commit-ICO UI lands in the next slice. After AI accept, anyone
-              will be able to commit USDC during a 3-hour window; if commitments
-              clear <span className="font-mono text-fg">minRaise</span>, the
-              project launches and depositors claim pro-rata tokens.
-            </p>
-          </Card>
+
+          {usingFallback ? (
+            <Card className="p-5">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-faint mb-3">
+                Launch sale
+              </h2>
+              <p className="text-sm text-muted leading-relaxed">
+                Demo proposal — submit a real proposal at{" "}
+                <Link href="/create" className="text-brand-3 hover:text-brand font-medium">
+                  /create
+                </Link>{" "}
+                to test the commit flow on-chain.
+              </p>
+            </Card>
+          ) : raw && raw.sale !== zeroAddress ? (
+            <CommitPanel raw={raw} />
+          ) : raw ? (
+            <Card className="p-5">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-faint mb-3">
+                Launch sale
+              </h2>
+              <p className="text-sm text-muted leading-relaxed">
+                Awaiting AI verdict. Once{" "}
+                <span className="font-mono text-fg">3-of-5</span> agents sign off on this
+                proposal, the launch sale opens automatically.
+              </p>
+            </Card>
+          ) : null}
 
           {proposal.state === "passed" && (
             <Card className="p-5 border-[#7c3aed]/30 bg-[#7c3aed]/5">

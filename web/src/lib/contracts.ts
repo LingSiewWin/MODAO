@@ -271,6 +271,31 @@ export const launchSaleAbi = [
       { name: "totalCommitted", type: "uint256", indexed: false },
     ],
   },
+  {
+    type: "event",
+    name: "Claimed",
+    inputs: [
+      { name: "depositor", type: "address", indexed: true },
+      { name: "commitment", type: "uint256", indexed: false },
+      { name: "tokensReceived", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Refunded",
+    inputs: [
+      { name: "depositor", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "FundsClaimed",
+    inputs: [
+      { name: "recipient", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
 ] as const;
 
 // ----------------------------------------------------------------------------
