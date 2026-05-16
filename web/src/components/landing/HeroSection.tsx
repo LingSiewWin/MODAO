@@ -1,54 +1,82 @@
-import { LinkButton } from "@/components/ui/LinkButton";
-import { LogoMark } from "@/components/brand/Logo";
-import { MeshBackground } from "@/components/brand/MeshBackground";
-import { Badge } from "@/components/ui/Badge";
+"use client";
+
+import { motion } from "framer-motion";
+import Link from "next/link";
+import { Button } from "@/components/ui/Button";
+import { ArrowRight } from "lucide-react";
+import { UnicornStudioBackground } from "./UnicornStudioBackground";
 
 export function HeroSection() {
   return (
-    <section className="relative isolate overflow-hidden min-h-[88vh] flex items-center pt-24 pb-16">
-      <MeshBackground />
+    <section className="relative min-h-screen flex flex-col items-center justify-start overflow-hidden pt-32">
+      {/* UnicornStudio background */}
+      <UnicornStudioBackground />
 
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 w-full">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="rise flex justify-center">
-            <Badge variant="brand" className="text-[11px] uppercase tracking-widest">
-              <LogoMark size={14} />
-              Futarchy on Monad
-            </Badge>
-          </div>
+      {/* Subtle overlay for text legibility */}
+      <div className="absolute inset-0 bg-bg-primary/40 pointer-events-none" style={{ zIndex: 1 }} />
 
-          <h1 className="rise rise-delay-1 mt-6 text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] text-fg">
-            <span
-              className="bg-clip-text text-transparent"
-              style={{ backgroundImage: "var(--accent-gradient)" }}
-            >
-              Launch
-            </span>{" "}
-            an{" "}
-            <span
-              className="bg-clip-text text-transparent"
-              style={{ backgroundImage: "var(--accent-gradient)" }}
-            >
-              ownership
-            </span>{" "}
-            coin.
-          </h1>
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 text-center">
+        {/* Logo */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="mb-10"
+        >
+          <img
+            src="/MoDAO-whitelogo.svg"
+            alt="MoDAO"
+            className="h-10 w-auto mx-auto"
+          />
+        </motion.div>
 
-          <p className="rise rise-delay-2 mt-6 text-lg sm:text-xl text-muted max-w-2xl mx-auto leading-relaxed">
-            Raise capital while putting ownership in the hands of your earliest believers.
-            Decisions priced by markets, not committees — settled in sub-second finality on Monad.
-          </p>
+        {/* Headline */}
+        <motion.h1
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.05] mb-72"
+        >
+          <span className="text-text-primary">Launch an </span>
+          <span className="gradient-text">ownership</span>
+          <br />
+          <span className="text-text-primary">coin</span>
+        </motion.h1>
 
-          <div className="rise rise-delay-3 mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <LinkButton href="/create" variant="gradient" size="lg">
+
+        {/* Subtitle */}
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="text-lg sm:text-xl text-text-secondary max-w-xl mx-auto mb-10 leading-relaxed"
+        >
+          Raise money while putting ownership into the hands of your early users and believers.
+        </motion.p>
+
+        {/* CTAs */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="flex flex-col sm:flex-row items-center justify-center gap-4"
+        >
+          <Link href="/create">
+            <Button size="lg" className="gap-2 min-w-[200px]">
               Launch a Project
-            </LinkButton>
-            <LinkButton href="/proposals" variant="secondary" size="lg">
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </Link>
+          <Link href="/proposals">
+            <Button variant="secondary" size="lg" className="min-w-[200px]">
               Explore Proposals
-            </LinkButton>
-          </div>
-        </div>
+            </Button>
+          </Link>
+        </motion.div>
       </div>
+
+      {/* Bottom fade */}
+      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-bg-primary to-transparent" style={{ zIndex: 1 }} />
     </section>
   );
 }

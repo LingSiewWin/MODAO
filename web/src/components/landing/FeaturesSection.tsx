@@ -1,77 +1,73 @@
-/* 2×2 feature grid. Icons inlined as SVG so we don't depend on lucide-react
-   being installed. All icons share the same stroke/size for visual rhythm. */
+"use client";
 
-import { Card } from "@/components/ui/Card";
+import { motion } from "framer-motion";
+import { Equal, Eye, Shield, Scale } from "lucide-react";
 
 const features = [
   {
-    title: "Fair launch, every time",
-    body: "Bonding curves replace VC allocations. Every buyer pays the same curve price — no early-insider discount, no token unlocks crashing the chart on day 30.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-6">
-        <path d="M3 17l6-6 4 4 8-8" />
-        <path d="M14 7h7v7" />
-      </svg>
-    ),
+    icon: <Equal className="w-8 h-8 text-accent-primary" />,
+    title: "Fair launch early",
+    description: "Everyone gets the same price, anyone can participate",
   },
   {
-    title: "Transparent by default",
-    body: "Every verdict, every trade, every TWAP observation lives on-chain. No backroom token deals. No private order flow. The audit trail is the product.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-6">
-        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-    ),
+    icon: <Eye className="w-8 h-8 text-accent-primary" />,
+    title: "Transparent",
+    description: "Avoid the backroom token deals that plague crypto",
   },
   {
-    title: "Raise more, with rug protection",
-    body: "Treasury releases gated by ongoing futarchy markets. If the project drifts, the market shorts it — and unspent funds stay protected for holders.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-6">
-        <path d="M12 22s8-4 8-12V5l-8-3-8 3v5c0 8 8 12 8 12z" />
-        <path d="M9 12l2 2 4-4" />
-      </svg>
-    ),
+    icon: <Shield className="w-8 h-8 text-accent-primary" />,
+    title: "Raise more",
+    description: "Through rug protection for your holders",
   },
   {
+    icon: <Scale className="w-8 h-8 text-accent-primary" />,
     title: "Real alignment",
-    body: "Legal structure binds the launching entity to the token's success. AI agents pre-screen for scams; markets keep teams honest after launch.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="size-6">
-        <path d="M12 3v18M5 8l7-5 7 5M3 21h18" />
-        <path d="M7 21V11h10v10" />
-      </svg>
-    ),
+    description: "Legal structuring keeps the business and the token aligned",
   },
 ];
 
 export function FeaturesSection() {
   return (
-    <section className="relative py-24 sm:py-32">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="max-w-2xl">
-          <p className="text-xs font-semibold text-brand-3 uppercase tracking-widest">
-            Why MoDAO
-          </p>
-          <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight text-fg">
-            A launchpad with skin in the game
+    <section className="py-24 relative">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="text-center mb-16"
+        >
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-4">
+            Launch a project{" "}
+            <span className="gradient-text">the right way</span>
           </h2>
-          <p className="mt-4 text-muted leading-relaxed">
-            Most launchpads are gatekept by humans, paid in fees, and walk away after token-generation event.
-            MoDAO replaces the gatekeeper with an AI agent swarm and binds outcomes to live prediction markets.
+          <p className="text-text-secondary max-w-xl mx-auto">
+            Skip the low float / high FDV playbook and get funded by your community.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {features.map((f) => (
-            <Card key={f.title} className="p-6">
-              <div className="flex size-11 items-center justify-center rounded-[var(--radius-md)] bg-brand/10 text-brand-3 border border-brand/20">
-                {f.icon}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-12 max-w-3xl mx-auto">
+          {features.map((feature, i) => (
+            <motion.div
+              key={feature.title}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: i * 0.1 }}
+              className="flex items-start gap-4"
+            >
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-accent-primary/10 flex items-center justify-center">
+                {feature.icon}
               </div>
-              <h3 className="mt-5 text-lg font-semibold text-fg">{f.title}</h3>
-              <p className="mt-2 text-sm text-muted leading-relaxed">{f.body}</p>
-            </Card>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary mb-1">
+                  {feature.title}
+                </h3>
+                <p className="text-sm text-text-secondary leading-relaxed">
+                  {feature.description}
+                </p>
+              </div>
+            </motion.div>
           ))}
         </div>
       </div>

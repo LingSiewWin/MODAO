@@ -1,51 +1,69 @@
+"use client";
+
+import { motion } from "framer-motion";
+import { TrendingUp, BarChart3, Wallet } from "lucide-react";
+
 const pillars = [
   {
-    n: "01",
+    icon: <TrendingUp className="w-8 h-8 text-accent-primary" />,
     title: "Conditional markets",
-    body: "For every proposal, two markets open: PASS and FAIL. Traders price the same outcome under each scenario — the spread is the decision.",
+    description:
+      "Traders bet on whether an action would increase the value of a project",
   },
   {
-    n: "02",
+    icon: <BarChart3 className="w-8 h-8 text-accent-primary" />,
     title: "Price-based resolution",
-    body: "After a TWAP window, the higher-priced market wins. Losing-side trades brick. No vote-buying, no apathy discount.",
+    description:
+      "Proposals are accepted if the market thinks they would create value",
   },
   {
-    n: "03",
+    icon: <Wallet className="w-8 h-8 text-accent-primary" />,
     title: "Skin in the game",
-    body: "Make the right call, grow your portfolio. The traders most informed about a project are the ones whose capital decides its fate.",
+    description:
+      "You grow your portfolio when you help projects make better decisions",
   },
 ];
 
 export function FutarchySection() {
   return (
-    <section className="relative py-24 sm:py-32 border-t border-border">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto">
-          <p className="text-xs font-semibold text-brand-3 uppercase tracking-widest">
-            Futarchy, explained
-          </p>
-          <h2 className="mt-3 text-4xl sm:text-5xl font-bold tracking-tight text-fg">
-            We don&apos;t vote.{" "}
-            <span
-              className="bg-clip-text text-transparent"
-              style={{ backgroundImage: "var(--accent-gradient)" }}
-            >
-              We trade.
-            </span>
+    <section className="py-24 relative bg-bg-secondary/30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="text-center mb-16"
+        >
+          <h2 className="text-3xl sm:text-4xl font-bold text-text-primary mb-6">
+            We don&apos;t vote,{" "}
+            <span className="gradient-text">we trade</span>
           </h2>
-          <p className="mt-5 text-lg text-muted leading-relaxed">
-            Voting rewards loud opinions. Markets reward correct ones.
-            MoDAO turns every governance question into a price — and lets capital settle the answer.
+          <p className="text-text-secondary max-w-2xl mx-auto leading-relaxed">
+            The key advantage of decision markets is that they harness the predictive power of financial markets and asset prices to guide decision-making, with participants placing real monetary stakes behind their forecasts.
           </p>
-        </div>
+        </motion.div>
 
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-px bg-border rounded-[var(--radius-lg)] overflow-hidden border border-border">
-          {pillars.map((p) => (
-            <div key={p.n} className="bg-bg p-8 sm:p-10">
-              <div className="font-mono text-sm text-brand-3">{p.n}</div>
-              <h3 className="mt-4 text-xl font-semibold text-fg">{p.title}</h3>
-              <p className="mt-3 text-sm text-muted leading-relaxed">{p.body}</p>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+          {pillars.map((pillar, i) => (
+            <motion.div
+              key={pillar.title}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: i * 0.1 }}
+              className="text-center"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-accent-primary/10 flex items-center justify-center mx-auto mb-5">
+                {pillar.icon}
+              </div>
+              <h3 className="text-lg font-semibold text-text-primary mb-2">
+                {pillar.title}
+              </h3>
+              <p className="text-sm text-text-secondary leading-relaxed">
+                {pillar.description}
+              </p>
+            </motion.div>
           ))}
         </div>
       </div>
