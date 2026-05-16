@@ -8,39 +8,33 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import {
-  CONTRACTS,
-  governorAbi,
-  erc20Abi,
-  mockUsdcAbi,
-} from "@/lib/contracts";
+import { CONTRACTS, governorAbi, erc20Abi } from "@/lib/contracts";
 
 /**
- * Full submit flow:
- *   1. mint USDC if user balance < bond (testnet convenience — MockUSDC has open mint)
- *   2. approve MODAO + USDC to the governor for the bond
- *   3. call submitProposal(spec)
+ * Full submit flow (v3, commit-ICO):
+ *   1. approve MODAO to the governor for the proposer bond
+ *   2. call submitProposal(spec)
  *
- * Each step is its own state — UI can render a stepper.
+ * No USDC bond in v3 — the USDC commitment happens later from anyone during
+ * the sale window; the proposer just stakes MODAO as anti-spam.
  */
 export type SubmitState =
   | "idle"
   | "checking"
-  | "minting-usdc"
   | "approving-modao"
-  | "approving-usdc"
   | "submitting"
   | "success"
   | "error";
 
 const BOND_MODAO = parseUnits("100", 18);
-const BOND_USDC = parseUnits("100", 6);
 
 export interface ProjectSpecInput {
   name: string;
   symbol: string;
   supply: bigint;
   descriptionURI: string;
+  /** Minimum USDC raise required for the sale to succeed (6 decimals). */
+  minRaise: bigint;
 }
 
 export function useSubmitProposal() {
@@ -81,19 +75,7 @@ export function useSubmitProposal() {
       try {
         setError(null);
 
-        // 1. mint USDC if short — testnet only.
-        if (!usdcBalance || usdcBalance < BOND_USDC) {
-          setState("minting-usdc");
-          const hash = await writeContractAsync({
-            address: CONTRACTS.mockUsdc,
-            abi: mockUsdcAbi,
-            functionName: "mint",
-            args: [address, BOND_USDC],
-          });
-          setTxHash(hash);
-        }
-
-        // 2a. approve MODAO bond.
+        // 1. approve MODAO bond.
         setState("approving-modao");
         const mApproveHash = await writeContractAsync({
           address: CONTRACTS.modaoToken,
@@ -103,17 +85,7 @@ export function useSubmitProposal() {
         });
         setTxHash(mApproveHash);
 
-        // 2b. approve USDC bond.
-        setState("approving-usdc");
-        const uApproveHash = await writeContractAsync({
-          address: CONTRACTS.mockUsdc,
-          abi: erc20Abi,
-          functionName: "approve",
-          args: [CONTRACTS.governor, BOND_USDC],
-        });
-        setTxHash(uApproveHash);
-
-        // 3. submit.
+        // 2. submit.
         setState("submitting");
         const submitHash = await writeContractAsync({
           address: CONTRACTS.governor,
@@ -129,7 +101,7 @@ export function useSubmitProposal() {
         setState("error");
       }
     },
-    [address, usdcBalance, writeContractAsync],
+    [address, writeContractAsync],
   );
 
   return {
@@ -141,12 +113,10 @@ export function useSubmitProposal() {
     modaoBalance,
     usdcBalance,
     bondMODAO: BOND_MODAO,
-    bondUSDC: BOND_USDC,
     canSubmit:
       !!address &&
       (modaoBalance ?? 0n) >= BOND_MODAO &&
       state !== "submitting" &&
-      state !== "approving-modao" &&
-      state !== "approving-usdc",
+      state !== "approving-modao",
   };
 }

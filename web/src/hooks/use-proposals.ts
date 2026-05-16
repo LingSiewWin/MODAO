@@ -74,9 +74,8 @@ export function useProposal(id: string | undefined) {
 
 function shapeProposal(id: bigint, raw: OnchainProposal): Proposal {
   const state = statusToState(raw.status, raw.outcome);
-  const startedAt = Number(raw.marketStartedAt) * 1000;
-  // TWAP_WINDOW is 3h on-chain — hardcode the constant rather than fetch.
-  const endsAt = startedAt > 0 ? startedAt + 3 * 60 * 60 * 1000 : Date.now() + 3 * 60 * 60 * 1000;
+  const startedAt = Number(raw.saleStartedAt) * 1000;
+  const endsAt = Number(raw.saleEndsAt) * 1000;
 
   return {
     id: `prop_${String(id).padStart(3, "0")}`,
@@ -87,21 +86,22 @@ function shapeProposal(id: bigint, raw: OnchainProposal): Proposal {
     descriptionUrl: raw.spec.descriptionURI || "#",
     proposer: raw.proposer,
     state,
-    slotEnqueued: Number(raw.marketStartedAt) || 0,
-    // Pre-market state — UI shows 50/50 until markets open and we wire AMM TWAP reads.
-    passTwap: state === "passed" ? 0.65 : state === "failed" ? 0.35 : 0.5,
-    failTwap: state === "passed" ? 0.35 : state === "failed" ? 0.65 : 0.5,
+    slotEnqueued: Number(raw.saleStartedAt) || 0,
+    // Sale TWAP isn't meaningful in commit-ICO — leave as placeholders for
+    // any list-card progress indicator that wants a 0..1 number.
+    passTwap: state === "passed" ? 1 : state === "failed" ? 0 : 0.5,
+    failTwap: state === "passed" ? 0 : state === "failed" ? 1 : 0.5,
     passThresholdBps: 500,
     volumeUsd: 0,
     createdAt: new Date(startedAt || Date.now()).toISOString(),
-    endsAt: new Date(endsAt).toISOString(),
+    endsAt: new Date(endsAt || Date.now() + 3 * 60 * 60 * 1000).toISOString(),
   };
 }
 
 function statusToState(status: number, outcome: number): ProposalState {
   if (status === ProposalStatus.Finalized) {
-    return outcome === ProposalOutcome.Pass ? "passed" : "failed";
+    return outcome === ProposalOutcome.Successful ? "passed" : "failed";
   }
-  // Submitted + MarketsOpen both surface as "pending" to the user.
+  // Submitted + SaleOpen both surface as "pending" to the user.
   return "pending";
 }

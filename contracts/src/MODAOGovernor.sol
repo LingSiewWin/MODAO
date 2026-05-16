@@ -4,37 +4,31 @@ pragma solidity 0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {AISwarmOracle} from "./AISwarmOracle.sol";
-import {ConditionalVault} from "./ConditionalVault.sol";
-import {ProposalAMM} from "./ProposalAMM.sol";
 import {ProjectToken} from "./ProjectToken.sol";
+import {LaunchSale} from "./LaunchSale.sol";
 
-/// @title MODAOGovernor
-/// @notice Orchestrates the futarchy launchpad lifecycle:
-///         Submitted → MarketsOpen → Finalized.
+/// @title MODAOGovernor (commit-ICO model, MetaDAO-style)
+/// @notice Lifecycle:
+///         Submitted → SaleOpen → Finalized.
 ///
-/// @dev On AI-accept the governor deploys a fresh `ProjectToken` ERC20 for the
-///      proposal and opens conditional markets denominated in PROJECT/USDC —
-///      mirroring MetaDAO's fundraise model. MODAO is *not* in any trading pair;
-///      it's the protocol token (anti-spam bond + protocol-fee target).
+/// @dev On AI-accept the governor:
+///        1. mints a fresh per-proposal ProjectToken with the proposer's spec,
+///        2. deploys a LaunchSale that escrows the full supply and runs a
+///           timed USDC commitment window,
+///        3. once the window closes anyone calls finalize() to evaluate the
+///           sale: ≥minRaise → Successful (depositors claim pro-rata tokens,
+///           proposer claims raised USDC); else → Failed (depositors refund).
 ///
-///      Capital flow:
-///        - Proposer pays BOND_MODAO (anti-spam, held in governor) +
-///          BOND_USDC (seeds initial USDC-side liquidity).
-///        - Governor mints full project supply, splits it into pass/fail
-///          conditional tokens, and seeds both AMMs with half each.
-///        - During the market window anyone can deposit USDC into the USDC
-///          conditional vault and trade pass/fail tokens on the AMMs.
-///        - After TWAP_WINDOW, finalize() reads both pool TWAPs; higher wins.
-///        - On PASS, ProjectLaunched fires (post-MVP: pass_USDC redeems to
-///          real USDC for the project, pass_PROJECT redeems to real PROJECT
-///          for depositors).
+///        The conditional-vault / AMM primitives are intentionally not in this
+///        file — they remain in the repo for a future post-launch governance
+///        product, but the launch flow itself doesn't use them.
 contract MODAOGovernor {
     using SafeERC20 for IERC20;
 
     enum Status {
         None,
         Submitted,
-        MarketsOpen,
+        SaleOpen,
         Finalized
     }
 
@@ -43,51 +37,45 @@ contract MODAOGovernor {
         string symbol;
         uint256 supply;
         string descriptionURI; // ipfs:// or http link to long-form pitch
+        /// @notice Minimum USDC the sale must collect to count as Successful.
+        uint256 minRaise;
     }
 
     struct Proposal {
         address proposer;
         Status status;
-        ConditionalVault.Outcome outcome;
-        address projectToken; // ERC20 deployed at market-open
-        ConditionalVault projectVault;
-        ConditionalVault usdcVault;
-        ProposalAMM passAmm;
-        ProposalAMM failAmm;
-        uint256 marketStartedAt;
-        uint256 passCumulativeAtStart;
-        uint256 failCumulativeAtStart;
+        LaunchSale.State outcome;
+        address projectToken; // ERC20 minted at sale-open time
+        LaunchSale sale;
+        uint256 saleStartedAt;
+        uint256 saleEndsAt;
         ProjectSpec spec;
     }
 
     error UnknownProposal();
     error WrongStatus();
-    error TWAPWindowNotElapsed();
+    error SaleNotEnded();
     error InvalidSpec();
 
     event ProposalSubmitted(uint256 indexed proposalId, address indexed proposer, string name, string symbol);
-    event MarketsOpened(
+    event SaleOpened(
         uint256 indexed proposalId,
         address projectToken,
-        address projectVault,
-        address usdcVault,
-        address passAmm,
-        address failAmm
+        address sale,
+        uint256 minRaise,
+        uint256 saleEndsAt
     );
-    event ProposalFinalized(
-        uint256 indexed proposalId, ConditionalVault.Outcome outcome, uint256 passTwap, uint256 failTwap
-    );
-    event ProjectLaunched(uint256 indexed proposalId, address projectToken, string name, string symbol, uint256 supply, string descriptionURI);
+    event ProposalFinalized(uint256 indexed proposalId, LaunchSale.State outcome, uint256 totalCommitted);
+    event ProjectLaunched(uint256 indexed proposalId, address projectToken, string name, string symbol, uint256 supply, uint256 raised);
 
     IERC20 public immutable modao;
     IERC20 public immutable usdc;
     AISwarmOracle public immutable oracle;
 
-    /// @dev MODAO anti-spam bond. Sits in the governor; slash/refund per outcome is roadmap.
+    /// @dev MODAO anti-spam bond. Held in the governor; slash/refund policy is roadmap.
     uint256 public constant BOND_MODAO = 100e18;
-    /// @dev USDC seed for initial AMM liquidity on the USDC side of both pools.
-    uint256 public constant BOND_USDC = 100e6;
-    uint256 public constant TWAP_WINDOW = 3 hours;
+    /// @dev Sale window. 3h for hackathon demo; MetaDAO uses ~4 days in production.
+    uint256 public constant SALE_WINDOW = 3 hours;
 
     uint256 public proposalCount;
     mapping(uint256 => Proposal) internal _proposals;
@@ -98,11 +86,15 @@ contract MODAOGovernor {
         oracle = oracle_;
     }
 
-    /// @notice Submit a proposal. Pulls BOND_MODAO + BOND_USDC from the proposer.
+    /// @notice Submit a proposal. Pulls BOND_MODAO from the proposer.
+    /// @dev    Spec must include name, symbol, non-zero supply, and a positive minRaise.
     function submitProposal(ProjectSpec calldata spec) external returns (uint256 proposalId) {
-        if (spec.supply == 0 || bytes(spec.name).length == 0 || bytes(spec.symbol).length == 0) {
-            revert InvalidSpec();
-        }
+        if (
+            spec.supply == 0
+                || spec.minRaise == 0
+                || bytes(spec.name).length == 0
+                || bytes(spec.symbol).length == 0
+        ) revert InvalidSpec();
 
         proposalId = ++proposalCount;
         Proposal storage p = _proposals[proposalId];
@@ -111,13 +103,12 @@ contract MODAOGovernor {
         p.spec = spec;
 
         modao.safeTransferFrom(msg.sender, address(this), BOND_MODAO);
-        usdc.safeTransferFrom(msg.sender, address(this), BOND_USDC);
 
         emit ProposalSubmitted(proposalId, msg.sender, spec.name, spec.symbol);
     }
 
-    /// @notice Forward an AI-swarm verdict bundle to the oracle. On accept, deploy
-    ///         the project token and open the conditional markets.
+    /// @notice Forward an AI-swarm verdict bundle to the oracle. On accept,
+    ///         mint the project token, deploy the sale, and start the window.
     function submitVerdictAndOpen(
         uint256 proposalId,
         uint256 score,
@@ -128,80 +119,58 @@ contract MODAOGovernor {
         Proposal storage p = _proposals[proposalId];
         if (p.status != Status.Submitted) revert WrongStatus();
         oracle.submitVerdict(proposalId, score, reasoningHash, deadline, signatures);
-        _openMarkets(proposalId);
+        _openSale(proposalId);
     }
 
-    function _openMarkets(uint256 proposalId) internal {
+    function _openSale(uint256 proposalId) internal {
         Proposal storage p = _proposals[proposalId];
 
-        // 1. Deploy the project's ERC20 with the proposer's name/symbol/supply.
+        // 1. Deploy the project's ERC20 with full supply minted to this contract.
         ProjectToken project = new ProjectToken(p.spec.name, p.spec.symbol, p.spec.supply, address(this));
         p.projectToken = address(project);
 
-        // 2. Conditional vaults: one for the project token, one for USDC.
-        ConditionalVault projectVault = new ConditionalVault(IERC20(address(project)), address(this), p.spec.symbol, proposalId);
-        ConditionalVault usdcVault = new ConditionalVault(usdc, address(this), "USDC", proposalId);
-
-        // 3. Deposit full project supply -> mint p+f project tokens to governor.
-        IERC20(address(project)).forceApprove(address(projectVault), p.spec.supply);
-        projectVault.deposit(p.spec.supply);
-
-        // 4. Deposit USDC bond -> mint p+f USDC to governor.
-        usdc.forceApprove(address(usdcVault), BOND_USDC);
-        usdcVault.deposit(BOND_USDC);
-
-        // 5. Deploy AMM pairs: pass_PROJECT/pass_USDC and fail_PROJECT/fail_USDC.
-        ProposalAMM passAmm = new ProposalAMM(
-            IERC20(address(projectVault.passToken())), IERC20(address(usdcVault.passToken()))
+        // 2. Deploy the sale, then transfer the entire token supply into it.
+        uint256 endsAt = block.timestamp + SALE_WINDOW;
+        LaunchSale sale = new LaunchSale(
+            usdc,
+            IERC20(address(project)),
+            p.proposer,
+            p.spec.minRaise,
+            endsAt,
+            p.spec.supply
         );
-        ProposalAMM failAmm = new ProposalAMM(
-            IERC20(address(projectVault.failToken())), IERC20(address(usdcVault.failToken()))
-        );
+        IERC20(address(project)).safeTransfer(address(sale), p.spec.supply);
 
-        // 6. Seed each pool with half the conditional supply on each side.
-        uint256 halfProject = p.spec.supply / 2;
-        uint256 halfUsdc = BOND_USDC / 2;
+        p.sale = sale;
+        p.saleStartedAt = block.timestamp;
+        p.saleEndsAt = endsAt;
+        p.status = Status.SaleOpen;
 
-        IERC20(address(projectVault.passToken())).forceApprove(address(passAmm), halfProject);
-        IERC20(address(usdcVault.passToken())).forceApprove(address(passAmm), halfUsdc);
-        passAmm.addLiquidity(halfProject, halfUsdc, address(this));
-
-        IERC20(address(projectVault.failToken())).forceApprove(address(failAmm), halfProject);
-        IERC20(address(usdcVault.failToken())).forceApprove(address(failAmm), halfUsdc);
-        failAmm.addLiquidity(halfProject, halfUsdc, address(this));
-
-        p.projectVault = projectVault;
-        p.usdcVault = usdcVault;
-        p.passAmm = passAmm;
-        p.failAmm = failAmm;
-        p.marketStartedAt = block.timestamp;
-        (p.passCumulativeAtStart,) = passAmm.snapshotCumulative();
-        (p.failCumulativeAtStart,) = failAmm.snapshotCumulative();
-        p.status = Status.MarketsOpen;
-
-        emit MarketsOpened(proposalId, address(project), address(projectVault), address(usdcVault), address(passAmm), address(failAmm));
+        emit SaleOpened(proposalId, address(project), address(sale), p.spec.minRaise, endsAt);
     }
 
-    /// @notice Read TWAP from both pools and finalize. Higher TWAP wins.
+    /// @notice After the sale window ends, finalize: trigger sale.finalize(),
+    ///         persist outcome on the proposal, emit ProjectLaunched on success.
     function finalize(uint256 proposalId) external {
         Proposal storage p = _proposals[proposalId];
-        if (p.status != Status.MarketsOpen) revert WrongStatus();
-        if (block.timestamp < p.marketStartedAt + TWAP_WINDOW) revert TWAPWindowNotElapsed();
+        if (p.status != Status.SaleOpen) revert WrongStatus();
+        if (block.timestamp < p.saleEndsAt) revert SaleNotEnded();
 
-        uint256 passTwap = p.passAmm.consultTWAP(p.passCumulativeAtStart, p.marketStartedAt);
-        uint256 failTwap = p.failAmm.consultTWAP(p.failCumulativeAtStart, p.marketStartedAt);
+        LaunchSale sale = p.sale;
+        // sale.finalize() reverts if already finalized — that's fine; if someone
+        // else finalized the sale already we still want to settle our status.
+        if (sale.state() == LaunchSale.State.Open) {
+            sale.finalize();
+        }
 
-        ConditionalVault.Outcome outcome =
-            passTwap >= failTwap ? ConditionalVault.Outcome.Pass : ConditionalVault.Outcome.Fail;
-
-        p.projectVault.finalize(outcome);
-        p.usdcVault.finalize(outcome);
+        LaunchSale.State outcome = sale.state();
         p.outcome = outcome;
         p.status = Status.Finalized;
+        uint256 raised = sale.totalCommitted();
 
-        emit ProposalFinalized(proposalId, outcome, passTwap, failTwap);
-        if (outcome == ConditionalVault.Outcome.Pass) {
-            emit ProjectLaunched(proposalId, p.projectToken, p.spec.name, p.spec.symbol, p.spec.supply, p.spec.descriptionURI);
+        emit ProposalFinalized(proposalId, outcome, raised);
+        if (outcome == LaunchSale.State.Successful) {
+            emit ProjectLaunched(proposalId, p.projectToken, p.spec.name, p.spec.symbol, p.spec.supply, raised);
         }
     }
 

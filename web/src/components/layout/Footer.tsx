@@ -4,7 +4,6 @@ import { Logo } from "@/components/brand/Logo";
 const FOOTER_LINKS = {
   Product: [
     { href: "/proposals", label: "Proposals" },
-    { href: "/markets", label: "Markets" },
     { href: "/create", label: "Create Proposal" },
     { href: "/dao", label: "DAO Directory" },
   ],

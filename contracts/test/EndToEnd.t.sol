@@ -6,10 +6,13 @@ import {MODAOToken} from "../src/MODAOToken.sol";
 import {MockUSDC} from "../src/MockUSDC.sol";
 import {AISwarmOracle} from "../src/AISwarmOracle.sol";
 import {MODAOGovernor} from "../src/MODAOGovernor.sol";
-import {ConditionalVault} from "../src/ConditionalVault.sol";
-import {ProposalAMM} from "../src/ProposalAMM.sol";
+import {LaunchSale} from "../src/LaunchSale.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+/// @notice End-to-end commit-ICO lifecycle:
+///   submitProposal → AI verdict → sale opens → depositors commit USDC →
+///   time-warp past saleEndsAt → finalize → depositors claim pro-rata tokens,
+///   proposer claims raised USDC. Plus a failure path (under minRaise → refund).
 contract EndToEndTest is Test {
     MODAOToken modao;
     MockUSDC usdc;
@@ -18,7 +21,8 @@ contract EndToEndTest is Test {
 
     address admin = address(0xA0);
     address proposer = address(0xB0);
-    address trader = address(0xC0);
+    address alice = address(0xA11CE);
+    address bob = address(0xB0B);
 
     uint256[5] agentPks;
     address[5] agentAddrs;
@@ -26,10 +30,9 @@ contract EndToEndTest is Test {
     function setUp() public {
         modao = new MODAOToken(admin);
         usdc = new MockUSDC();
-        oracle = new AISwarmOracle(admin, 3, 60); // threshold 3, minScore 60
+        oracle = new AISwarmOracle(admin, 3, 60);
         governor = new MODAOGovernor(IERC20(address(modao)), IERC20(address(usdc)), oracle);
 
-        // Pick 5 deterministic agent keys.
         for (uint256 i = 0; i < 5; i++) {
             agentPks[i] = uint256(keccak256(abi.encode("agent", i)));
             agentAddrs[i] = vm.addr(agentPks[i]);
@@ -38,26 +41,21 @@ contract EndToEndTest is Test {
         for (uint256 i = 0; i < 5; i++) {
             oracle.registerAgent(agentAddrs[i]);
         }
-        // Fund proposer with bonds.
         modao.transfer(proposer, 100e18);
         vm.stopPrank();
-        usdc.mint(proposer, 100e6);
 
-        // Fund trader.
-        vm.prank(admin);
-        modao.transfer(trader, 10e18);
-        usdc.mint(trader, 10_000e6);
+        // Pre-fund depositors with USDC.
+        usdc.mint(alice, 10_000e6);
+        usdc.mint(bob, 10_000e6);
     }
 
     function _sortedSignatures(bytes32 digest, uint256 n) internal view returns (bytes[] memory sigs) {
-        // Pick first n agents whose addresses we'll sort ascending for the oracle's dedup rule.
         uint256[] memory pks = new uint256[](n);
         address[] memory addrs = new address[](n);
         for (uint256 i = 0; i < n; i++) {
             pks[i] = agentPks[i];
             addrs[i] = agentAddrs[i];
         }
-        // bubble sort
         for (uint256 i = 0; i < n; i++) {
             for (uint256 j = i + 1; j < n; j++) {
                 if (addrs[j] < addrs[i]) {
@@ -73,78 +71,134 @@ contract EndToEndTest is Test {
         }
     }
 
-    function test_FullLifecyclePass() public {
-        // 1. Submit proposal
+    function _submitAndOpen(uint256 supply, uint256 minRaise) internal returns (uint256 pid, LaunchSale sale) {
         vm.startPrank(proposer);
         modao.approve(address(governor), 100e18);
-        usdc.approve(address(governor), 100e6);
-        uint256 pid = governor.submitProposal(
+        pid = governor.submitProposal(
             MODAOGovernor.ProjectSpec({
                 name: "Acme Coin",
                 symbol: "ACME",
-                supply: 1_000_000e18,
-                descriptionURI: "ipfs://Qmtest"
+                supply: supply,
+                descriptionURI: "ipfs://Qmtest",
+                minRaise: minRaise
             })
         );
         vm.stopPrank();
-        assertEq(pid, 1);
 
-        // 2. Build verdict and sign with 3 agents
         uint256 score = 85;
-        bytes32 reasoningHash = keccak256("agents-said-this-looks-legit");
+        bytes32 reasoningHash = keccak256("looks-legit");
         uint256 deadline = block.timestamp + 1 hours;
         bytes32 digest = oracle.verdictDigest(pid, score, reasoningHash, deadline);
         bytes[] memory sigs = _sortedSignatures(digest, 3);
-
-        // 3. Submit verdict → markets open
         governor.submitVerdictAndOpen(pid, score, reasoningHash, deadline, sigs);
-        MODAOGovernor.Proposal memory p = governor.getProposal(pid);
-        assertEq(uint256(p.status), uint256(MODAOGovernor.Status.MarketsOpen));
 
-        // 4. Trader buys PASS_USDC into PASS pool — pushes pass price up
-        // First trader needs pass_USDC. They get it by depositing USDC into the conditional vault.
-        ConditionalVault uVault = p.usdcVault;
-        vm.startPrank(trader);
-        usdc.approve(address(uVault), 5_000e6);
-        uVault.deposit(5_000e6);
-        // Now trader has 5000 pass_USDC + 5000 fail_USDC. Swap pass_USDC → pass_MODAO in pass pool.
-        IERC20 passUSDC = IERC20(address(uVault.passToken()));
-        passUSDC.approve(address(p.passAmm), 5_000e6);
-        // zeroForOne: token0 is MODAO-side (passToken of modaoVault). We want to buy pass_MODAO with pass_USDC,
-        // so we swap token1 → token0, i.e. zeroForOne = false.
-        p.passAmm.swap(false, 200e6, 0, trader);
+        sale = governor.getProposal(pid).sale;
+    }
+
+    function test_LifecycleSuccess() public {
+        // 1M supply, minRaise 500 USDC
+        (uint256 pid, LaunchSale sale) = _submitAndOpen(1_000_000e18, 500e6);
+
+        // Alice commits 600 USDC, Bob commits 400 USDC -> total 1000 USDC (>= minRaise)
+        vm.startPrank(alice);
+        usdc.approve(address(sale), 600e6);
+        sale.commit(600e6);
         vm.stopPrank();
 
-        // 5. Time-warp past TWAP window
+        vm.startPrank(bob);
+        usdc.approve(address(sale), 400e6);
+        sale.commit(400e6);
+        vm.stopPrank();
+
+        assertEq(sale.totalCommitted(), 1_000e6);
+
+        // Time-warp past sale window
         vm.warp(block.timestamp + 3 hours + 1);
 
-        // 6. Finalize → expect Pass
-        vm.recordLogs();
+        // Anyone finalizes
         governor.finalize(pid);
-        p = governor.getProposal(pid);
+        MODAOGovernor.Proposal memory p = governor.getProposal(pid);
         assertEq(uint256(p.status), uint256(MODAOGovernor.Status.Finalized));
-        assertEq(uint256(p.outcome), uint256(ConditionalVault.Outcome.Pass));
+        assertEq(uint256(p.outcome), uint256(LaunchSale.State.Successful));
 
-        // 7. Trader can redeem pass_PROJECT 1:1 for the real project ERC20
-        uint256 passProjectBal = IERC20(address(p.projectVault.passToken())).balanceOf(trader);
-        assertGt(passProjectBal, 0);
+        // Depositors claim pro-rata
         IERC20 projectToken = IERC20(p.projectToken);
-        uint256 projectBefore = projectToken.balanceOf(trader);
-        vm.prank(trader);
-        p.projectVault.redeem(passProjectBal);
-        assertEq(projectToken.balanceOf(trader), projectBefore + passProjectBal);
+        vm.prank(alice);
+        sale.claimTokens();
+        vm.prank(bob);
+        sale.claimTokens();
+
+        // Alice committed 60% -> 600K tokens; Bob 40% -> 400K tokens
+        assertEq(projectToken.balanceOf(alice), 600_000e18);
+        assertEq(projectToken.balanceOf(bob), 400_000e18);
+
+        // Proposer claims raised USDC
+        uint256 proposerBefore = usdc.balanceOf(proposer);
+        vm.prank(proposer);
+        sale.claimFunds();
+        assertEq(usdc.balanceOf(proposer) - proposerBefore, 1_000e6);
+    }
+
+    function test_LifecycleFailureRefunds() public {
+        // 1M supply, minRaise 500 USDC; commitments only 200 USDC
+        (uint256 pid, LaunchSale sale) = _submitAndOpen(1_000_000e18, 500e6);
+
+        vm.startPrank(alice);
+        usdc.approve(address(sale), 200e6);
+        sale.commit(200e6);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 3 hours + 1);
+        governor.finalize(pid);
+
+        MODAOGovernor.Proposal memory p = governor.getProposal(pid);
+        assertEq(uint256(p.outcome), uint256(LaunchSale.State.Failed));
+
+        // Alice refunds
+        uint256 aliceBefore = usdc.balanceOf(alice);
+        vm.prank(alice);
+        sale.refund();
+        assertEq(usdc.balanceOf(alice) - aliceBefore, 200e6);
+
+        // claimFunds reverts on Failed
+        vm.expectRevert(LaunchSale.NotSuccessful.selector);
+        vm.prank(proposer);
+        sale.claimFunds();
+    }
+
+    function test_CommitRejectedAfterWindow() public {
+        (, LaunchSale sale) = _submitAndOpen(1_000_000e18, 100e6);
+
+        vm.warp(block.timestamp + 3 hours + 1);
+
+        vm.startPrank(alice);
+        usdc.approve(address(sale), 50e6);
+        vm.expectRevert(LaunchSale.WindowEnded.selector);
+        sale.commit(50e6);
+        vm.stopPrank();
+    }
+
+    function test_FinalizeBeforeWindowEndsReverts() public {
+        (uint256 pid,) = _submitAndOpen(1_000_000e18, 100e6);
+        vm.expectRevert(MODAOGovernor.SaleNotEnded.selector);
+        governor.finalize(pid);
     }
 
     function test_VerdictRejectedScoreBelowMin() public {
         vm.startPrank(proposer);
         modao.approve(address(governor), 100e18);
-        usdc.approve(address(governor), 100e6);
         uint256 pid = governor.submitProposal(
-            MODAOGovernor.ProjectSpec({name: "Rug", symbol: "RUG", supply: 1_000e18, descriptionURI: ""})
+            MODAOGovernor.ProjectSpec({
+                name: "Rug",
+                symbol: "RUG",
+                supply: 1_000e18,
+                descriptionURI: "",
+                minRaise: 100e6
+            })
         );
         vm.stopPrank();
 
-        uint256 score = 30; // below minScore=60
+        uint256 score = 30;
         bytes32 reasoningHash = keccak256("smells-bad");
         uint256 deadline = block.timestamp + 1 hours;
         bytes32 digest = oracle.verdictDigest(pid, score, reasoningHash, deadline);
@@ -157,9 +211,14 @@ contract EndToEndTest is Test {
     function test_TooFewSignatures() public {
         vm.startPrank(proposer);
         modao.approve(address(governor), 100e18);
-        usdc.approve(address(governor), 100e6);
         uint256 pid = governor.submitProposal(
-            MODAOGovernor.ProjectSpec({name: "X", symbol: "X", supply: 1_000e18, descriptionURI: ""})
+            MODAOGovernor.ProjectSpec({
+                name: "X",
+                symbol: "X",
+                supply: 1_000e18,
+                descriptionURI: "",
+                minRaise: 100e6
+            })
         );
         vm.stopPrank();
 
@@ -167,7 +226,7 @@ contract EndToEndTest is Test {
         bytes32 reasoningHash = bytes32(0);
         uint256 deadline = block.timestamp + 1 hours;
         bytes32 digest = oracle.verdictDigest(pid, score, reasoningHash, deadline);
-        bytes[] memory sigs = _sortedSignatures(digest, 2); // threshold is 3
+        bytes[] memory sigs = _sortedSignatures(digest, 2);
 
         vm.expectRevert(AISwarmOracle.TooFewSignatures.selector);
         governor.submitVerdictAndOpen(pid, score, reasoningHash, deadline, sigs);

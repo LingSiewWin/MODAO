@@ -7,10 +7,9 @@ import {MODAOGovernor} from "../src/MODAOGovernor.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Redeploys ONLY MODAOGovernor against the existing token/oracle deployment.
-///         Used after the governor's _openMarkets logic was rewritten to mint a
-///         per-proposal ProjectToken (MetaDAO-style) instead of using MODAO as the
-///         base trading pair. Tokens and oracle are unchanged so the registered
-///         agent set is preserved.
+///         Pivoted (v3) to the MetaDAO commit-ICO model: governor now deploys a
+///         ProjectToken + LaunchSale per proposal, no conditional vaults/AMMs.
+///         Tokens and oracle are unchanged so the registered agent set is preserved.
 contract RedeployGovernorScript is Script {
     // Pinned addresses from deployments/monad-testnet.json — Monad testnet.
     address constant MODAO_TOKEN = 0xb2De502B643Fe5cC7781Fc8B18493a414DEe8AFB;

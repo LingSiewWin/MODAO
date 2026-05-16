@@ -23,7 +23,10 @@ export const CONTRACTS = {
 } as const;
 
 // ----------------------------------------------------------------------------
-// MODAOGovernor
+// MODAOGovernor v3 — commit-ICO model (MetaDAO-style fundraise).
+//   Lifecycle: Submitted (1) → SaleOpen (2) → Finalized (3).
+//   On AI-accept, governor deploys a fresh ProjectToken + LaunchSale.
+//   No conditional vaults / AMMs in this flow (shelved for Phase-2 governance).
 // ----------------------------------------------------------------------------
 
 export const governorAbi = [
@@ -47,13 +50,9 @@ export const governorAbi = [
           { name: "status", type: "uint8" },
           { name: "outcome", type: "uint8" },
           { name: "projectToken", type: "address" },
-          { name: "projectVault", type: "address" },
-          { name: "usdcVault", type: "address" },
-          { name: "passAmm", type: "address" },
-          { name: "failAmm", type: "address" },
-          { name: "marketStartedAt", type: "uint256" },
-          { name: "passCumulativeAtStart", type: "uint256" },
-          { name: "failCumulativeAtStart", type: "uint256" },
+          { name: "sale", type: "address" },
+          { name: "saleStartedAt", type: "uint256" },
+          { name: "saleEndsAt", type: "uint256" },
           {
             name: "spec",
             type: "tuple",
@@ -62,6 +61,7 @@ export const governorAbi = [
               { name: "symbol", type: "string" },
               { name: "supply", type: "uint256" },
               { name: "descriptionURI", type: "string" },
+              { name: "minRaise", type: "uint256" },
             ],
           },
         ],
@@ -70,8 +70,7 @@ export const governorAbi = [
     stateMutability: "view",
   },
   { type: "function", name: "BOND_MODAO", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { type: "function", name: "BOND_USDC", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
-  { type: "function", name: "TWAP_WINDOW", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "SALE_WINDOW", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   // ---- writes ----
   {
     type: "function",
@@ -85,10 +84,24 @@ export const governorAbi = [
           { name: "symbol", type: "string" },
           { name: "supply", type: "uint256" },
           { name: "descriptionURI", type: "string" },
+          { name: "minRaise", type: "uint256" },
         ],
       },
     ],
     outputs: [{ type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "submitVerdictAndOpen",
+    inputs: [
+      { name: "proposalId", type: "uint256" },
+      { name: "score", type: "uint256" },
+      { name: "reasoningHash", type: "bytes32" },
+      { name: "deadline", type: "uint256" },
+      { name: "signatures", type: "bytes[]" },
+    ],
+    outputs: [],
     stateMutability: "nonpayable",
   },
   {
@@ -111,14 +124,13 @@ export const governorAbi = [
   },
   {
     type: "event",
-    name: "MarketsOpened",
+    name: "SaleOpened",
     inputs: [
       { name: "proposalId", type: "uint256", indexed: true },
       { name: "projectToken", type: "address", indexed: false },
-      { name: "projectVault", type: "address", indexed: false },
-      { name: "usdcVault", type: "address", indexed: false },
-      { name: "passAmm", type: "address", indexed: false },
-      { name: "failAmm", type: "address", indexed: false },
+      { name: "sale", type: "address", indexed: false },
+      { name: "minRaise", type: "uint256", indexed: false },
+      { name: "saleEndsAt", type: "uint256", indexed: false },
     ],
   },
   {
@@ -127,8 +139,7 @@ export const governorAbi = [
     inputs: [
       { name: "proposalId", type: "uint256", indexed: true },
       { name: "outcome", type: "uint8", indexed: false },
-      { name: "passTwap", type: "uint256", indexed: false },
-      { name: "failTwap", type: "uint256", indexed: false },
+      { name: "totalCommitted", type: "uint256", indexed: false },
     ],
   },
   {
@@ -140,7 +151,60 @@ export const governorAbi = [
       { name: "name", type: "string", indexed: false },
       { name: "symbol", type: "string", indexed: false },
       { name: "supply", type: "uint256", indexed: false },
-      { name: "descriptionURI", type: "string", indexed: false },
+      { name: "raised", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+// ----------------------------------------------------------------------------
+// LaunchSale — one per proposal, deployed by the governor on AI-accept.
+// ----------------------------------------------------------------------------
+
+export const launchSaleAbi = [
+  // ---- views ----
+  { type: "function", name: "usdc", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "projectToken", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "recipient", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "minRaise", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "saleEndsAt", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "tokenSupplyForSale", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "state", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
+  { type: "function", name: "totalCommitted", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    type: "function",
+    name: "commitments",
+    inputs: [{ name: "depositor", type: "address" }],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  // ---- writes ----
+  {
+    type: "function",
+    name: "commit",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  { type: "function", name: "finalize", inputs: [], outputs: [], stateMutability: "nonpayable" },
+  { type: "function", name: "claimTokens", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "nonpayable" },
+  { type: "function", name: "refund", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "nonpayable" },
+  { type: "function", name: "claimFunds", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "nonpayable" },
+  // ---- events ----
+  {
+    type: "event",
+    name: "Committed",
+    inputs: [
+      { name: "depositor", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "totalCommitted", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Finalized",
+    inputs: [
+      { name: "state", type: "uint8", indexed: false },
+      { name: "totalCommitted", type: "uint256", indexed: false },
     ],
   },
 ] as const;
@@ -311,38 +375,39 @@ export const conditionalVaultAbi = [
 ] as const;
 
 // ----------------------------------------------------------------------------
-// On-chain proposal status — mirrors MODAOGovernor.Status enum.
+// On-chain proposal status — mirrors MODAOGovernor.Status enum (v3, commit-ICO).
 // ----------------------------------------------------------------------------
 
 export const ProposalStatus = {
   None: 0,
   Submitted: 1,
-  MarketsOpen: 2,
+  SaleOpen: 2,
   Finalized: 3,
 } as const;
 
-export const ProposalOutcome = {
-  Undecided: 0,
-  Pass: 1,
-  Fail: 2,
+/** Mirrors LaunchSale.State enum. */
+export const LaunchSaleState = {
+  Open: 0,
+  Successful: 1,
+  Failed: 2,
 } as const;
+
+/** Proposal.outcome holds a LaunchSale.State value once finalized. */
+export const ProposalOutcome = LaunchSaleState;
 
 export type OnchainProposal = {
   proposer: Address;
   status: number;
   outcome: number;
   projectToken: Address;
-  projectVault: Address;
-  usdcVault: Address;
-  passAmm: Address;
-  failAmm: Address;
-  marketStartedAt: bigint;
-  passCumulativeAtStart: bigint;
-  failCumulativeAtStart: bigint;
+  sale: Address;
+  saleStartedAt: bigint;
+  saleEndsAt: bigint;
   spec: {
     name: string;
     symbol: string;
     supply: bigint;
     descriptionURI: string;
+    minRaise: bigint;
   };
 };

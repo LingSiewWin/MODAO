@@ -57,9 +57,30 @@ export interface ProjectSpec {
   symbol: string;
   supply: bigint;
   descriptionURI: string;
+  /** Minimum USDC raise required for sale Successful (6 decimals). */
+  minRaise: bigint;
+}
+
+/** Mirrors LaunchSale.State (0 Open / 1 Successful / 2 Failed). */
+export enum LaunchSaleState {
+  Open = 0,
+  Successful = 1,
+  Failed = 2,
+}
+
+/** Mirrors MODAOGovernor.Status (0 None / 1 Submitted / 2 SaleOpen / 3 Finalized). */
+export enum ProposalStatus {
+  None = 0,
+  Submitted = 1,
+  SaleOpen = 2,
+  Finalized = 3,
 }
 
 // Minimal ABIs — only what agents and frontend touch.
+//
+// Governor v3 = MetaDAO-style commit-ICO model. Each proposal on AI-accept
+// deploys a fresh ProjectToken + LaunchSale; conditional vaults / AMMs are no
+// longer part of the launch flow (shelved for the Phase-2 governance product).
 export const MODAO_GOVERNOR_ABI = [
   {
     type: "event",
@@ -73,14 +94,13 @@ export const MODAO_GOVERNOR_ABI = [
   },
   {
     type: "event",
-    name: "MarketsOpened",
+    name: "SaleOpened",
     inputs: [
       { name: "proposalId", type: "uint256", indexed: true },
       { name: "projectToken", type: "address", indexed: false },
-      { name: "projectVault", type: "address", indexed: false },
-      { name: "usdcVault", type: "address", indexed: false },
-      { name: "passAmm", type: "address", indexed: false },
-      { name: "failAmm", type: "address", indexed: false },
+      { name: "sale", type: "address", indexed: false },
+      { name: "minRaise", type: "uint256", indexed: false },
+      { name: "saleEndsAt", type: "uint256", indexed: false },
     ],
   },
   {
@@ -89,8 +109,7 @@ export const MODAO_GOVERNOR_ABI = [
     inputs: [
       { name: "proposalId", type: "uint256", indexed: true },
       { name: "outcome", type: "uint8", indexed: false },
-      { name: "passTwap", type: "uint256", indexed: false },
-      { name: "failTwap", type: "uint256", indexed: false },
+      { name: "totalCommitted", type: "uint256", indexed: false },
     ],
   },
   {
@@ -102,8 +121,27 @@ export const MODAO_GOVERNOR_ABI = [
       { name: "name", type: "string", indexed: false },
       { name: "symbol", type: "string", indexed: false },
       { name: "supply", type: "uint256", indexed: false },
-      { name: "descriptionURI", type: "string", indexed: false },
+      { name: "raised", type: "uint256", indexed: false },
     ],
+  },
+  {
+    type: "function",
+    name: "submitProposal",
+    stateMutability: "nonpayable",
+    inputs: [
+      {
+        name: "spec",
+        type: "tuple",
+        components: [
+          { name: "name", type: "string" },
+          { name: "symbol", type: "string" },
+          { name: "supply", type: "uint256" },
+          { name: "descriptionURI", type: "string" },
+          { name: "minRaise", type: "uint256" },
+        ],
+      },
+    ],
+    outputs: [{ type: "uint256" }],
   },
   {
     type: "function",
@@ -120,6 +158,34 @@ export const MODAO_GOVERNOR_ABI = [
   },
   {
     type: "function",
+    name: "finalize",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "proposalId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "BOND_MODAO",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "SALE_WINDOW",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "proposalCount",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "getProposal",
     stateMutability: "view",
     inputs: [{ name: "proposalId", type: "uint256" }],
@@ -131,13 +197,9 @@ export const MODAO_GOVERNOR_ABI = [
           { name: "status", type: "uint8" },
           { name: "outcome", type: "uint8" },
           { name: "projectToken", type: "address" },
-          { name: "projectVault", type: "address" },
-          { name: "usdcVault", type: "address" },
-          { name: "passAmm", type: "address" },
-          { name: "failAmm", type: "address" },
-          { name: "marketStartedAt", type: "uint256" },
-          { name: "passCumulativeAtStart", type: "uint256" },
-          { name: "failCumulativeAtStart", type: "uint256" },
+          { name: "sale", type: "address" },
+          { name: "saleStartedAt", type: "uint256" },
+          { name: "saleEndsAt", type: "uint256" },
           {
             type: "tuple",
             name: "spec",
@@ -146,10 +208,66 @@ export const MODAO_GOVERNOR_ABI = [
               { name: "symbol", type: "string" },
               { name: "supply", type: "uint256" },
               { name: "descriptionURI", type: "string" },
+              { name: "minRaise", type: "uint256" },
             ],
           },
         ],
       },
+    ],
+  },
+] as const;
+
+export const LAUNCH_SALE_ABI = [
+  // ---- views ----
+  { type: "function", name: "usdc", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "projectToken", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "recipient", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "minRaise", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "saleEndsAt", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "tokenSupplyForSale", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "state", stateMutability: "view", inputs: [], outputs: [{ type: "uint8" }] },
+  { type: "function", name: "totalCommitted", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  {
+    type: "function",
+    name: "commitments",
+    stateMutability: "view",
+    inputs: [{ name: "depositor", type: "address" }],
+    outputs: [{ type: "uint256" }],
+  },
+  // ---- writes ----
+  {
+    type: "function",
+    name: "commit",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  { type: "function", name: "finalize", stateMutability: "nonpayable", inputs: [], outputs: [] },
+  {
+    type: "function",
+    name: "claimTokens",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
+  { type: "function", name: "refund", stateMutability: "nonpayable", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "claimFunds", stateMutability: "nonpayable", inputs: [], outputs: [{ type: "uint256" }] },
+  // ---- events ----
+  {
+    type: "event",
+    name: "Committed",
+    inputs: [
+      { name: "depositor", type: "address", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+      { name: "totalCommitted", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Finalized",
+    inputs: [
+      { name: "state", type: "uint8", indexed: false },
+      { name: "totalCommitted", type: "uint256", indexed: false },
     ],
   },
 ] as const;

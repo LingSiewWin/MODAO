@@ -12,7 +12,6 @@ const socialLinks = [
 
 const navLinks = [
   { href: "/proposals", label: "Proposals" },
-  { href: "/markets", label: "Markets" },
   { href: "/dao", label: "DAO Directory" },
   { href: "/create", label: "Create Proposal" },
 ];

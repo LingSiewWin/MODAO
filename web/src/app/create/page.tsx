@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { parseUnits } from "viem";
+import { formatUnits, parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { AppShell } from "@/components/layout/AppShell";
@@ -9,12 +9,10 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useSubmitProposal, type SubmitState } from "@/hooks/use-submit-proposal";
 import { cn, formatNumber } from "@/lib/utils";
-import { formatUnits } from "viem";
 
 const STEPS = [
   { key: "describe", title: "Describe", body: "Project name, symbol, and pitch URL." },
-  { key: "tokenomics", title: "Tokenomics", body: "Total token supply." },
-  { key: "raise", title: "Bond", body: "Post the proposer bond — refunded on PASS." },
+  { key: "sale", title: "Sale terms", body: "Total token supply + minimum USDC raise." },
   { key: "review", title: "Review", body: "Confirm and submit on-chain." },
 ] as const;
 
@@ -24,7 +22,10 @@ interface FormState {
   name: string;
   symbol: string;
   descriptionURI: string;
+  /** Whole tokens; 18 decimals applied at submit. */
   supply: string;
+  /** USDC; 6 decimals applied at submit. */
+  minRaise: string;
 }
 
 const INITIAL: FormState = {
@@ -32,6 +33,7 @@ const INITIAL: FormState = {
   symbol: "",
   descriptionURI: "",
   supply: "1000000",
+  minRaise: "500",
 };
 
 export default function CreatePage() {
@@ -40,17 +42,8 @@ export default function CreatePage() {
   const stepIdx = STEPS.findIndex((s) => s.key === step);
 
   const { address, isConnected } = useAccount();
-  const {
-    submit,
-    state,
-    error,
-    txHash,
-    modaoBalance,
-    usdcBalance,
-    bondMODAO,
-    bondUSDC,
-    canSubmit,
-  } = useSubmitProposal();
+  const { submit, state, error, txHash, modaoBalance, bondMODAO, canSubmit } =
+    useSubmitProposal();
 
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -62,13 +55,14 @@ export default function CreatePage() {
       symbol: form.symbol,
       supply: parseUnits(form.supply || "0", 18),
       descriptionURI: form.descriptionURI,
+      minRaise: parseUnits(form.minRaise || "0", 6),
     });
   };
 
   return (
     <AppShell
       title="Create a proposal"
-      description="Submit a project to the futarchy market on Monad. AI agents pre-screen, then markets decide."
+      description="Submit a project. AI agents pre-screen; on accept, a commit-style ICO opens for 3 hours."
     >
       <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
         <aside className="space-y-4">
@@ -112,23 +106,17 @@ export default function CreatePage() {
           <BalancePanel
             address={address}
             modaoBalance={modaoBalance}
-            usdcBalance={usdcBalance}
             bondMODAO={bondMODAO}
-            bondUSDC={bondUSDC}
           />
         </aside>
 
         <Card className="p-6 sm:p-8">
           {step === "describe" && <DescribeStep form={form} setField={setField} />}
-          {step === "tokenomics" && <TokenomicsStep form={form} setField={setField} />}
-          {step === "raise" && (
-            <RaiseStep bondMODAO={bondMODAO} bondUSDC={bondUSDC} />
-          )}
+          {step === "sale" && <SaleStep form={form} setField={setField} />}
           {step === "review" && (
             <ReviewStep
               form={form}
               bondMODAO={bondMODAO}
-              bondUSDC={bondUSDC}
               state={state}
               error={error}
               txHash={txHash}
@@ -160,7 +148,7 @@ export default function CreatePage() {
               <Button
                 variant="gradient"
                 onClick={onSubmit}
-                disabled={!canSubmit || state === "submitting" || state === "approving-modao" || state === "approving-usdc"}
+                disabled={!canSubmit || state === "submitting" || state === "approving-modao"}
               >
                 {submitLabel(state)}
               </Button>
@@ -174,33 +162,25 @@ export default function CreatePage() {
 
 function submitLabel(s: SubmitState) {
   switch (s) {
-    case "minting-usdc":
-      return "Minting USDC…";
     case "approving-modao":
       return "Approving MODAO…";
-    case "approving-usdc":
-      return "Approving USDC…";
     case "submitting":
       return "Submitting…";
     case "success":
       return "Submitted ✓";
     default:
-      return "Submit on-chain · 100 MODAO + 100 USDC";
+      return "Submit on-chain · 100 MODAO bond";
   }
 }
 
 function BalancePanel({
   address,
   modaoBalance,
-  usdcBalance,
   bondMODAO,
-  bondUSDC,
 }: {
   address?: `0x${string}`;
   modaoBalance?: bigint;
-  usdcBalance?: bigint;
   bondMODAO: bigint;
-  bondUSDC: bigint;
 }) {
   if (!address) {
     return (
@@ -213,9 +193,7 @@ function BalancePanel({
     );
   }
   const modao = modaoBalance ?? 0n;
-  const usdc = usdcBalance ?? 0n;
   const modaoOk = modao >= bondMODAO;
-  const usdcOk = usdc >= bondUSDC; // MockUSDC has open mint — auto-minted if short.
 
   return (
     <Card className="p-4">
@@ -227,14 +205,10 @@ function BalancePanel({
           need="100.00"
           ok={modaoOk}
         />
-        <BalanceRow
-          label="USDC"
-          have={formatNumber(Number(formatUnits(usdc, 6)), 2)}
-          need="100.00"
-          ok={usdcOk}
-          hint={!usdcOk ? "auto-minted on submit" : undefined}
-        />
       </dl>
+      <p className="mt-3 text-[11px] text-faint leading-relaxed">
+        Anti-spam stake. Held in the governor; slash/refund policy is roadmap.
+      </p>
     </Card>
   );
 }
@@ -244,13 +218,11 @@ function BalanceRow({
   have,
   need,
   ok,
-  hint,
 }: {
   label: string;
   have: string;
   need: string;
   ok: boolean;
-  hint?: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
@@ -258,7 +230,6 @@ function BalanceRow({
       <span className="flex items-center gap-2 font-mono tabular">
         <span className={cn(ok ? "text-fg" : "text-warning")}>{have}</span>
         <span className="text-faint">/ {need}</span>
-        {hint && <span className="text-[10px] text-faint normal-case">({hint})</span>}
       </span>
     </div>
   );
@@ -291,7 +262,10 @@ function DescribeStep({
 }) {
   return (
     <div className="space-y-5">
-      <Header title="Describe the project" body="Name and symbol are stored on-chain. The pitch URL is whatever long-form description you want agents and traders to read." />
+      <Header
+        title="Describe the project"
+        body="Name and symbol are stored on-chain. Pitch URL is whatever long-form description you want agents and depositors to read."
+      />
       <div>
         <Label>Project name</Label>
         <Input
@@ -320,7 +294,7 @@ function DescribeStep({
   );
 }
 
-function TokenomicsStep({
+function SaleStep({
   form,
   setField,
 }: {
@@ -329,44 +303,30 @@ function TokenomicsStep({
 }) {
   return (
     <div className="space-y-5">
-      <Header title="Tokenomics" body="Total supply minted at launch. Distribution and vesting will be set in the executionPayload (post-MVP)." />
+      <Header
+        title="Sale terms"
+        body="Set your token supply and the minimum USDC you need raised. If commitments don't clear the minimum, depositors are refunded and the project doesn't launch."
+      />
       <div>
-        <Label hint="Whole tokens — 18 decimals applied at submit">Total supply</Label>
+        <Label hint="Whole tokens · 18 decimals">Total supply</Label>
         <Input
           value={form.supply}
           inputMode="numeric"
           onChange={(e) => setField("supply", e.target.value.replace(/[^0-9]/g, ""))}
         />
       </div>
-    </div>
-  );
-}
-
-function RaiseStep({ bondMODAO, bondUSDC }: { bondMODAO: bigint; bondUSDC: bigint }) {
-  return (
-    <div className="space-y-5">
-      <Header
-        title="Proposer bond"
-        body="A flat bond keeps spam out. Refunded if your proposal passes; forfeit to the protocol if it fails or never opens markets."
-      />
-      <div className="grid grid-cols-2 gap-3">
-        <BondCard label="MODAO" amount={formatUnits(bondMODAO, 18)} note="governance token" />
-        <BondCard label="USDC" amount={formatUnits(bondUSDC, 6)} note="auto-minted from MockUSDC on testnet" />
+      <div>
+        <Label hint="USDC · whole dollars">Minimum raise</Label>
+        <Input
+          value={form.minRaise}
+          inputMode="numeric"
+          onChange={(e) => setField("minRaise", e.target.value.replace(/[^0-9]/g, ""))}
+        />
+        <p className="mt-2 text-[11px] text-faint leading-relaxed">
+          Sale window is 3 hours. If <span className="font-mono">totalCommitted ≥ minRaise</span> →
+          launch executes, depositors claim their pro-rata token share, and you receive the raised USDC.
+        </p>
       </div>
-      <p className="text-xs text-faint leading-relaxed">
-        On testnet the MockUSDC contract exposes a public <code className="font-mono text-muted">mint()</code> —
-        the submit flow tops up your balance if it's below the bond.
-      </p>
-    </div>
-  );
-}
-
-function BondCard({ label, amount, note }: { label: string; amount: string; note: string }) {
-  return (
-    <div className="rounded-[var(--radius-md)] border border-border bg-surface-2 p-4">
-      <p className="text-[10px] uppercase tracking-widest text-faint">{label}</p>
-      <p className="mt-1 text-2xl font-mono tabular text-fg">{amount}</p>
-      <p className="mt-1 text-[11px] text-muted leading-relaxed">{note}</p>
     </div>
   );
 }
@@ -374,14 +334,12 @@ function BondCard({ label, amount, note }: { label: string; amount: string; note
 function ReviewStep({
   form,
   bondMODAO,
-  bondUSDC,
   state,
   error,
   txHash,
 }: {
   form: FormState;
   bondMODAO: bigint;
-  bondUSDC: bigint;
   state: SubmitState;
   error: Error | null;
   txHash: `0x${string}` | null;
@@ -390,16 +348,14 @@ function ReviewStep({
     <div className="space-y-5">
       <Header
         title="Review and submit"
-        body="On submit: USDC mint (if needed) → MODAO approve → USDC approve → submitProposal. Each step is a separate transaction."
+        body="On submit: approve MODAO bond → submitProposal. Two transactions."
       />
       <ul className="rounded-[var(--radius-md)] bg-surface-2 border border-border divide-y divide-border text-sm">
         <ReviewRow label="Project" value={form.name ? `${form.name} (${form.symbol || "—"})` : "—"} />
         <ReviewRow label="Supply" value={`${formatNumber(Number(form.supply || "0"), 0)} tokens`} />
+        <ReviewRow label="Minimum raise" value={`${formatNumber(Number(form.minRaise || "0"), 0)} USDC`} />
         <ReviewRow label="Pitch" value={form.descriptionURI || "—"} mono={false} />
-        <ReviewRow
-          label="Bond"
-          value={`${formatUnits(bondMODAO, 18)} MODAO + ${formatUnits(bondUSDC, 6)} USDC`}
-        />
+        <ReviewRow label="Bond" value={`${formatUnits(bondMODAO, 18)} MODAO`} />
       </ul>
 
       {state !== "idle" && state !== "success" && state !== "error" && (
