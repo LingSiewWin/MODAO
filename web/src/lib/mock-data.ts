@@ -21,6 +21,8 @@ export const MOCK_PROPOSALS: Proposal[] = [
     volumeUsd: 142_300,
     createdAt: "2026-05-14T09:12:00Z",
     endsAt: "2026-05-17T09:12:00Z",
+    projectToken: "0x0000000000000000000000000000000000000000",
+    sale: "0x0000000000000000000000000000000000000000",
   },
   {
     id: "prop_002",
@@ -39,6 +41,8 @@ export const MOCK_PROPOSALS: Proposal[] = [
     volumeUsd: 89_140,
     createdAt: "2026-05-13T15:42:00Z",
     endsAt: "2026-05-16T15:42:00Z",
+    projectToken: "0x0000000000000000000000000000000000000000",
+    sale: "0x0000000000000000000000000000000000000000",
   },
   {
     id: "prop_003",
@@ -57,6 +61,8 @@ export const MOCK_PROPOSALS: Proposal[] = [
     volumeUsd: 421_800,
     createdAt: "2026-05-10T11:00:00Z",
     endsAt: "2026-05-13T11:00:00Z",
+    projectToken: "0x0000000000000000000000000000000000000000",
+    sale: "0x0000000000000000000000000000000000000000",
   },
   {
     id: "prop_004",
@@ -75,6 +81,8 @@ export const MOCK_PROPOSALS: Proposal[] = [
     volumeUsd: 76_200,
     createdAt: "2026-05-07T08:30:00Z",
     endsAt: "2026-05-10T08:30:00Z",
+    projectToken: "0x0000000000000000000000000000000000000000",
+    sale: "0x0000000000000000000000000000000000000000",
   },
 ];
 

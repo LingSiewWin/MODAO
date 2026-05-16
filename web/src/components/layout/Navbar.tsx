@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { href: "/proposals", label: "Proposals" },
+  { href: "/proposals", label: "ICO Proposals" },
+  { href: "/futarchy", label: "Governance" },
   { href: "/dao", label: "DAO" },
-  { href: "/create", label: "Create Proposal" },
+  { href: "/create", label: "Submit Project" },
 ];
 
 export function Navbar() {

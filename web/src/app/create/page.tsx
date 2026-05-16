@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatUnits, parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { AIThinkingOverlay } from "@/components/proposals/AIThinkingOverlay";
 import { useSubmitProposal, type SubmitState } from "@/hooks/use-submit-proposal";
 import { cn, formatNumber } from "@/lib/utils";
 
@@ -26,6 +27,11 @@ interface FormState {
   supply: string;
   /** USDC; 6 decimals applied at submit. */
   minRaise: string;
+  /** Token distribution, integer percentages summing to 100. */
+  saleBps: string;
+  treasuryBps: string;
+  lpBps: string;
+  teamBps: string;
 }
 
 const INITIAL: FormState = {
@@ -34,7 +40,29 @@ const INITIAL: FormState = {
   descriptionURI: "",
   supply: "1000000",
   minRaise: "500",
+  saleBps: "50",
+  treasuryBps: "20",
+  lpBps: "20",
+  teamBps: "10",
 };
+
+function distSum(f: FormState): number {
+  return (
+    (Number(f.saleBps) || 0) +
+    (Number(f.treasuryBps) || 0) +
+    (Number(f.lpBps) || 0) +
+    (Number(f.teamBps) || 0)
+  );
+}
+
+/** Pack distribution into the descriptionURI as a hash fragment so the AI swarm
+ *  and on-chain readers see the intended split without a contract change. */
+function packDescriptionURI(f: FormState): string {
+  const base = f.descriptionURI.trim();
+  if (!base) return base;
+  const dist = `dist=${f.saleBps || 0},${f.treasuryBps || 0},${f.lpBps || 0},${f.teamBps || 0}`;
+  return base.includes("#") ? `${base}&${dist}` : `${base}#${dist}`;
+}
 
 export default function CreatePage() {
   const [step, setStep] = useState<StepKey>("describe");
@@ -42,19 +70,49 @@ export default function CreatePage() {
   const stepIdx = STEPS.findIndex((s) => s.key === step);
 
   const { address, isConnected } = useAccount();
-  const { submit, state, error, txHash, modaoBalance, bondMODAO, canSubmit } =
+  const { submit, state, error, txHash, proposalId, modaoBalance, bondMODAO, canSubmit } =
     useSubmitProposal();
+
+  const [overlayOpen, setOverlayOpen] = useState(false);
+
+  // Open the overlay the moment the wallet starts signing; close stays user-driven.
+  // Phase is derived from the real submit state — overlay flips to "done" when
+  // the agent worker calls submitVerdictAndOpen and the proposal status goes
+  // SaleOpen (accepted) or Finalized w/ Failed outcome (rejected).
+  useEffect(() => {
+    if (
+      state === "approving-modao" ||
+      state === "submitting" ||
+      state === "awaiting-verdict" ||
+      state === "verdict-accepted" ||
+      state === "verdict-rejected"
+    ) {
+      setOverlayOpen(true);
+    }
+  }, [state]);
+
+  const overlayPhase: "thinking" | "done" =
+    state === "verdict-accepted" || state === "verdict-rejected" ? "done" : "thinking";
+  const overlayOutcome: "accepted" | "rejected" | "pending" =
+    state === "verdict-accepted"
+      ? "accepted"
+      : state === "verdict-rejected"
+        ? "rejected"
+        : "pending";
 
   const setField = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const distOk = distSum(form) === 100;
+
   const onSubmit = async () => {
     if (!form.name || !form.symbol) return;
+    if (!distOk) return;
     await submit({
       name: form.name,
       symbol: form.symbol,
       supply: parseUnits(form.supply || "0", 18),
-      descriptionURI: form.descriptionURI,
+      descriptionURI: packDescriptionURI(form),
       minRaise: parseUnits(form.minRaise || "0", 6),
     });
   };
@@ -148,7 +206,7 @@ export default function CreatePage() {
               <Button
                 variant="gradient"
                 onClick={onSubmit}
-                disabled={!canSubmit || state === "submitting" || state === "approving-modao"}
+                disabled={!canSubmit || !distOk || state === "submitting" || state === "approving-modao"}
               >
                 {submitLabel(state)}
               </Button>
@@ -156,6 +214,16 @@ export default function CreatePage() {
           </div>
         </Card>
       </div>
+
+      <AIThinkingOverlay
+        open={overlayOpen}
+        phase={overlayPhase}
+        outcome={overlayOutcome}
+        proposalId={proposalId !== null ? `prop_${String(proposalId).padStart(3, "0")}` : null}
+        proposalIdNumeric={proposalId}
+        txHash={txHash}
+        onClose={() => setOverlayOpen(false)}
+      />
     </AppShell>
   );
 }
@@ -166,6 +234,12 @@ function submitLabel(s: SubmitState) {
       return "Approving MODAO…";
     case "submitting":
       return "Submitting…";
+    case "awaiting-verdict":
+      return "Awaiting AI verdict…";
+    case "verdict-accepted":
+      return "Accepted ✓";
+    case "verdict-rejected":
+      return "Rejected by panel";
     case "success":
       return "Submitted ✓";
     default:
@@ -283,12 +357,19 @@ function DescribeStep({
         />
       </div>
       <div>
-        <Label hint="ipfs:// or https://">Pitch URL</Label>
+        <Label hint="GitHub repo URL — required for agent scoring">Repo URL</Label>
         <Input
-          placeholder="https://docs.yourproject.com/proposal"
+          placeholder="https://github.com/your-org/your-repo"
           value={form.descriptionURI}
           onChange={(e) => setField("descriptionURI", e.target.value)}
         />
+        <p className="mt-2 text-[11px] text-faint leading-relaxed">
+          The AI swarm fork-checks this repo against{" "}
+          <span className="font-mono">monad-developers/monad-blitz-kl</span>{" "}
+          and scores its commit history. ipfs:// and https:// URLs that contain
+          a github.com link in their body also work, but a direct GitHub URL is
+          fastest.
+        </p>
       </div>
     </div>
   );
@@ -327,7 +408,70 @@ function SaleStep({
           launch executes, depositors claim their pro-rata token share, and you receive the raised USDC.
         </p>
       </div>
+
+      <DistributionFields form={form} setField={setField} />
     </div>
+  );
+}
+
+function DistributionFields({
+  form,
+  setField,
+}: {
+  form: FormState;
+  setField: <K extends keyof FormState>(k: K, v: FormState[K]) => void;
+}) {
+  const sum = distSum(form);
+  const ok = sum === 100;
+  const onChange = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setField(k, e.target.value.replace(/[^0-9]/g, "") as FormState[typeof k]);
+
+  return (
+    <div className="rounded-[var(--radius-md)] border border-border bg-surface-2 p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-medium text-fg">Token distribution</h3>
+        <span
+          className={cn(
+            "text-[11px] font-mono tabular",
+            ok ? "text-success" : "text-warning",
+          )}
+        >
+          {sum}% / 100%
+        </span>
+      </div>
+      <p className="mt-1 text-[11px] text-faint leading-relaxed">
+        Stated split. Enforcement is roadmap — for now, packed into the pitch URL so
+        the AI swarm can read your intent.
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <PctField label="Sale" value={form.saleBps} onChange={onChange("saleBps")} />
+        <PctField label="Treasury" value={form.treasuryBps} onChange={onChange("treasuryBps")} />
+        <PctField label="Liquidity" value={form.lpBps} onChange={onChange("lpBps")} />
+        <PctField label="Team" value={form.teamBps} onChange={onChange("teamBps")} />
+      </div>
+    </div>
+  );
+}
+
+function PctField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[11px] text-muted">{label}</span>
+      <div className="mt-1 relative">
+        <Input value={value} inputMode="numeric" onChange={onChange} />
+        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-faint">
+          %
+        </span>
+      </div>
+    </label>
   );
 }
 
@@ -354,6 +498,10 @@ function ReviewStep({
         <ReviewRow label="Project" value={form.name ? `${form.name} (${form.symbol || "—"})` : "—"} />
         <ReviewRow label="Supply" value={`${formatNumber(Number(form.supply || "0"), 0)} tokens`} />
         <ReviewRow label="Minimum raise" value={`${formatNumber(Number(form.minRaise || "0"), 0)} USDC`} />
+        <ReviewRow
+          label="Distribution"
+          value={`Sale ${form.saleBps || 0}% · Treasury ${form.treasuryBps || 0}% · LP ${form.lpBps || 0}% · Team ${form.teamBps || 0}%`}
+        />
         <ReviewRow label="Pitch" value={form.descriptionURI || "—"} mono={false} />
         <ReviewRow label="Bond" value={`${formatUnits(bondMODAO, 18)} MODAO`} />
       </ul>

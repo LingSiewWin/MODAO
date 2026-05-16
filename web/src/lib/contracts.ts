@@ -20,6 +20,9 @@ export const CONTRACTS = {
   // Redeployed: governor now mints a per-proposal ProjectToken and pairs
   // pass_PROJECT/pass_USDC instead of pass_MODAO/pass_USDC.
   governor: "0x89aA2ac89A69603ED0691aC1d1C73eebE8EC650F" as Address,
+  // FutarchyMarketFactory — governance-market factory, deployed independently
+  // from the ICO governor (any launched project token can have a market).
+  futarchyFactory: "0x3d457fea4d9fcda6f959c0e36dc92b3b6f8cdb16" as Address,
 } as const;
 
 // ----------------------------------------------------------------------------
@@ -152,6 +155,67 @@ export const governorAbi = [
       { name: "symbol", type: "string", indexed: false },
       { name: "supply", type: "uint256", indexed: false },
       { name: "raised", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+// ----------------------------------------------------------------------------
+// AISwarmOracle — threshold verdict gate. Stores aggregate score + reasoningHash
+// per proposalId; per-agent breakdown is NOT on chain (pinned to IPFS).
+// ----------------------------------------------------------------------------
+
+export const aiSwarmOracleAbi = [
+  // ---- views ----
+  { type: "function", name: "threshold", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "minScore", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "agentCount", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    type: "function",
+    name: "isAgent",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [{ type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "verdictRecorded",
+    inputs: [{ name: "proposalId", type: "uint256" }],
+    outputs: [{ type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "verdictScore",
+    inputs: [{ name: "proposalId", type: "uint256" }],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "verdictReasoning",
+    inputs: [{ name: "proposalId", type: "uint256" }],
+    outputs: [{ type: "bytes32" }],
+    stateMutability: "view",
+  },
+  // ---- events ----
+  {
+    type: "event",
+    name: "AgentRegistered",
+    inputs: [{ name: "agent", type: "address", indexed: true }],
+  },
+  {
+    type: "event",
+    name: "AgentRevoked",
+    inputs: [{ name: "agent", type: "address", indexed: true }],
+  },
+  {
+    type: "event",
+    name: "VerdictAccepted",
+    inputs: [
+      { name: "proposalId", type: "uint256", indexed: true },
+      { name: "score", type: "uint256", indexed: false },
+      { name: "reasoningHash", type: "bytes32", indexed: false },
+      { name: "signers", type: "uint256", indexed: false },
     ],
   },
 ] as const;
@@ -341,6 +405,114 @@ export const mockUsdcAbi = [
     stateMutability: "nonpayable",
   },
 ] as const;
+
+// ----------------------------------------------------------------------------
+// FutarchyMarketFactory — permissionless creator of governance markets for any
+// launched project token. Distinct from the ICO/AI-gate flow above.
+// ----------------------------------------------------------------------------
+
+export const futarchyFactoryAbi = [
+  { type: "function", name: "marketCount", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "usdc", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  {
+    type: "function",
+    name: "marketsByGlobalId",
+    inputs: [{ name: "marketId", type: "uint256" }],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "marketsByProject",
+    inputs: [{ name: "projectToken", type: "address" }],
+    outputs: [{ type: "uint256[]" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "marketsByProjectCount",
+    inputs: [{ name: "projectToken", type: "address" }],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "createProposal",
+    inputs: [
+      { name: "projectToken", type: "address" },
+      { name: "description", type: "string" },
+      { name: "tradingWindow", type: "uint256" },
+    ],
+    outputs: [{ name: "marketId", type: "uint256" }, { name: "marketAddr", type: "address" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "MarketCreated",
+    inputs: [
+      { name: "marketId", type: "uint256", indexed: true },
+      { name: "market", type: "address", indexed: true },
+      { name: "projectToken", type: "address", indexed: true },
+      { name: "proposer", type: "address", indexed: false },
+      { name: "description", type: "string", indexed: false },
+      { name: "tradingEndsAt", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+// ----------------------------------------------------------------------------
+// FutarchyMarket — one per governance proposal. Owns two ConditionalVaults
+// (PROJECT, USDC) and two ProposalAMMs (pass / fail).
+// ----------------------------------------------------------------------------
+
+export const futarchyMarketAbi = [
+  { type: "function", name: "projectToken", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "usdc", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "proposer", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "description", inputs: [], outputs: [{ type: "string" }], stateMutability: "view" },
+  { type: "function", name: "marketId", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "tradingEndsAt", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "projectVault", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "usdcVault", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "passAmm", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "failAmm", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "state", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
+  { type: "function", name: "outcome", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
+  { type: "function", name: "passTwap", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "failTwap", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  {
+    type: "function",
+    name: "snapshot",
+    inputs: [],
+    outputs: [
+      { name: "state_", type: "uint8" },
+      { name: "outcome_", type: "uint8" },
+      { name: "tradingEndsAt_", type: "uint256" },
+      { name: "passTwapLive", type: "uint256" },
+      { name: "failTwapLive", type: "uint256" },
+      { name: "passAmm_", type: "address" },
+      { name: "failAmm_", type: "address" },
+      { name: "projectVault_", type: "address" },
+      { name: "usdcVault_", type: "address" },
+      { name: "seeded", type: "bool" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "seedLiquidity",
+    inputs: [
+      { name: "projectAmount", type: "uint256" },
+      { name: "usdcAmount", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  { type: "function", name: "resolve", inputs: [], outputs: [], stateMutability: "nonpayable" },
+] as const;
+
+export const FutarchyMarketState = { Trading: 0, Resolved: 1 } as const;
+export const FutarchyOutcome = { None: 0, Pass: 1, Fail: 2 } as const;
 
 // ----------------------------------------------------------------------------
 // ConditionalVault — wraps an underlying ERC20 into pass/fail conditional tokens

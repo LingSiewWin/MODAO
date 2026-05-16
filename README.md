@@ -26,6 +26,26 @@
 
 The same brain evaluates **every** fork of `monad-developers/monad-blitz-kl` — no per-project setup, no hardcoded list. As new submissions land, the worker watches `ProposalSubmitted` on-chain and scores whatever GitHub URL the submitter pinned.
 
+### Deployed contracts (Monad testnet · chain 10143)
+
+| Contract | Address | Explorer |
+|---|---|---|
+| **MODAOToken** | `0xb2De502B643Fe5cC7781Fc8B18493a414DEe8AFB` | [view ↗](https://testnet.monadexplorer.com/address/0xb2De502B643Fe5cC7781Fc8B18493a414DEe8AFB) |
+| **MockUSDC** | `0xF1c0657Bb651D14a64a42Daa1381A4615D5e72F5` | [view ↗](https://testnet.monadexplorer.com/address/0xF1c0657Bb651D14a64a42Daa1381A4615D5e72F5) |
+| **AISwarmOracle** | `0xAF15A88b7d0CC75bb254662A1abf4d01491FE536` | [view ↗](https://testnet.monadexplorer.com/address/0xAF15A88b7d0CC75bb254662A1abf4d01491FE536) |
+| **MODAOGovernor** (v3, commit-ICO) | `0x89aA2ac89A69603ED0691aC1d1C73eebE8EC650F` | [view ↗](https://testnet.monadexplorer.com/address/0x89aA2ac89A69603ED0691aC1d1C73eebE8EC650F) |
+| **FutarchyMarketFactory** (post-launch governance) | `0x3D457fea4d9FcDA6F959c0E36Dc92B3b6f8CDB16` | [view ↗](https://testnet.monadexplorer.com/address/0x3D457fea4d9FcDA6F959c0E36Dc92B3b6f8CDB16) |
+| MODAOGovernor v1 (deprecated) | `0x7992f1590bE36DCc78079DE75ec796c904461342` | [view ↗](https://testnet.monadexplorer.com/address/0x7992f1590bE36DCc78079DE75ec796c904461342) |
+
+Per-proposal contracts (`ProjectToken`, `LaunchSale`, `FutarchyMarket` + its two `ConditionalVault`s and two `ProposalAMM`s) are deployed on-demand by the governor and factory — read them via `getProposal(id)` and `marketsByGlobalId(id)`.
+
+**Two distinct flows:**
+
+- **ICO submission** → `MODAOGovernor.submitProposal()` (gated by the 4-model AI swarm; pass opens a 3-hour commit-ICO via `LaunchSale`). UI: `/create` + `/proposals`.
+- **Post-launch governance** → `FutarchyMarketFactory.createProposal(projectToken, …)` (permissionless; pass/fail conditional markets — higher-TWAP side wins). UI: `/futarchy` + `/futarchy/create`.
+
+---
+
 Run it locally against any fork:
 
 ```bash
@@ -171,9 +191,10 @@ bun run dev    # http://localhost:3000
 MODAO/
 ├── contracts/                  Foundry — Solidity 0.8.24, via_ir, optimizer 200 runs
 │   ├── src/                    MODAOGovernor, AISwarmOracle, LaunchSale, ProjectToken,
-│   │                           ConditionalVault, ProposalAMM, MODAOToken, MockUSDC
+│   │                           ConditionalVault, ProposalAMM, MODAOToken, MockUSDC,
+│   │                           FutarchyMarket, FutarchyMarketFactory
 │   ├── test/                   Foundry unit + end-to-end (13/13 green on v3)
-│   └── script/                 Deploy.s.sol, RedeployGovernor.s.sol
+│   └── script/                 Deploy.s.sol, RedeployGovernor.s.sol, DeployFutarchy.s.sol
 │
 ├── agents/                     Off-chain AI swarm — TypeScript + Bun
 │   └── src/
@@ -191,10 +212,11 @@ MODAO/
 │       ├── worker.ts            event watcher
 │       └── chain.ts             lazy wallet (dry-run needs no submitter key)
 │
-├── web/                        Next.js 15 — landing + create + proposals + dao
+├── web/                        Next.js 15 — landing + create + proposals + dao + futarchy
 │   └── src/
-│       ├── app/                 routes: /, /create, /proposals, /proposals/[id], /dao
-│       └── components/          brand, landing, layout, proposals, ui
+│       ├── app/                 routes: /, /create, /proposals, /proposals/[id], /dao,
+│       │                         /futarchy, /futarchy/create, /futarchy/[id]
+│       └── components/          brand, landing, layout, proposals, futarchy, ui
 │
 ├── packages/shared/            Cross-package types, ABIs, deployment addresses
 ├── deployments/                On-chain deployment artifacts

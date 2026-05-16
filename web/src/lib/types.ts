@@ -17,6 +17,11 @@ export interface Proposal {
   volumeUsd: number;
   createdAt: string;
   endsAt: string;
+  /** Per-proposal ProjectToken minted by the governor when the sale opens.
+   *  Zero address for proposals that haven't been accepted by the AI swarm yet. */
+  projectToken: `0x${string}`;
+  /** Per-proposal LaunchSale contract. Zero address until SaleOpen. */
+  sale: `0x${string}`;
 }
 
 export interface Market {

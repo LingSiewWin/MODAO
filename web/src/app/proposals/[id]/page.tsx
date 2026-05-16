@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StateBadge } from "@/components/ui/Badge";
 import { ProposalCountdown } from "@/components/proposals/ProposalCountdown";
+import { AgentVerdictPanel } from "@/components/proposals/AgentVerdictPanel";
 import { useProposal } from "@/hooks/use-proposals";
 import { MOCK_PROPOSALS } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
@@ -110,6 +111,16 @@ export default function ProposalDetailPage({
         </aside>
 
         <div className="space-y-4">
+          <AgentVerdictPanel
+            proposalId={proposal.id}
+            outcome={
+              proposal.state === "passed"
+                ? "passed"
+                : proposal.state === "failed"
+                  ? "failed"
+                  : "pending"
+            }
+          />
           <Card className="p-5">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-faint mb-3">
               Launch sale
@@ -121,6 +132,32 @@ export default function ProposalDetailPage({
               project launches and depositors claim pro-rata tokens.
             </p>
           </Card>
+
+          {proposal.state === "passed" && (
+            <Card className="p-5 border-[#7c3aed]/30 bg-[#7c3aed]/5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#a78bfa]">
+                    Post-launch governance
+                  </span>
+                  <h2 className="mt-1 text-sm font-semibold text-fg">
+                    This project is live — token holders can now govern via futarchy
+                  </h2>
+                  <p className="mt-1 text-xs text-muted leading-relaxed">
+                    Anyone can spin up a governance market for{" "}
+                    <span className="font-mono text-fg">{proposal.symbol}</span>.
+                    Holders trade pass/fail markets and the higher-TWAP side wins.
+                  </p>
+                </div>
+                <Link
+                  href={`/futarchy/create?project=${proposal.id}`}
+                  className="shrink-0 inline-flex items-center justify-center px-3 py-2 text-xs font-medium rounded-[var(--radius-md)] bg-[#7c3aed] text-white hover:bg-[#6d28d9] transition-colors"
+                >
+                  Create proposal →
+                </Link>
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </AppShell>

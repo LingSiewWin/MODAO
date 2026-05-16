@@ -1,14 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { parseUnits, type Hash } from "viem";
+import { useCallback, useEffect, useState } from "react";
+import { decodeEventLog, parseUnits, type Hash } from "viem";
 import {
   useAccount,
   useReadContract,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { CONTRACTS, governorAbi, erc20Abi } from "@/lib/contracts";
+import { CONTRACTS, governorAbi, erc20Abi, ProposalStatus } from "@/lib/contracts";
 
 /**
  * Full submit flow (v3, commit-ICO):
@@ -24,6 +24,9 @@ export type SubmitState =
   | "approving-modao"
   | "submitting"
   | "success"
+  | "awaiting-verdict"
+  | "verdict-accepted"
+  | "verdict-rejected"
   | "error";
 
 const BOND_MODAO = parseUnits("100", 18);
@@ -59,10 +62,58 @@ export function useSubmitProposal() {
     query: { enabled: !!address },
   });
 
+  const [proposalId, setProposalId] = useState<bigint | null>(null);
+
   const { writeContractAsync } = useWriteContract();
-  const { isLoading: confirming } = useWaitForTransactionReceipt({
+  const { data: receipt, isLoading: confirming } = useWaitForTransactionReceipt({
     hash: txHash ?? undefined,
   });
+
+  // Decode ProposalSubmitted from the submit receipt to capture the new id.
+  useEffect(() => {
+    if (!receipt || state !== "submitting") return;
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== CONTRACTS.governor.toLowerCase()) continue;
+      try {
+        const decoded = decodeEventLog({
+          abi: governorAbi,
+          data: log.data,
+          topics: log.topics,
+        });
+        if (decoded.eventName === "ProposalSubmitted") {
+          setProposalId((decoded.args as { proposalId: bigint }).proposalId);
+          setState("awaiting-verdict");
+          return;
+        }
+      } catch {
+        // not this event; keep scanning
+      }
+    }
+  }, [receipt, state]);
+
+  // While awaiting the swarm verdict, poll the proposal status. The agent
+  // worker calls submitVerdictAndOpen → status flips to SaleOpen (accepted)
+  // or Finalized with outcome=Failed (rejected via synthetic 0-score path
+  // followed by a finalize, though in practice rejected proposals sit in
+  // Submitted with score < minScore — surface that as "rejected" too once
+  // the oracle revert lands).
+  const { data: liveProposal } = useReadContract({
+    address: CONTRACTS.governor,
+    abi: governorAbi,
+    functionName: "getProposal",
+    args: proposalId !== null ? [proposalId] : undefined,
+    query: {
+      enabled: proposalId !== null && state === "awaiting-verdict",
+      refetchInterval: 3000,
+    },
+  });
+
+  useEffect(() => {
+    if (state !== "awaiting-verdict" || !liveProposal) return;
+    const p = liveProposal as { status: number; outcome: number };
+    if (p.status === ProposalStatus.SaleOpen) setState("verdict-accepted");
+    else if (p.status === ProposalStatus.Finalized) setState("verdict-rejected");
+  }, [liveProposal, state]);
 
   const submit = useCallback(
     async (spec: ProjectSpecInput) => {
@@ -85,7 +136,8 @@ export function useSubmitProposal() {
         });
         setTxHash(mApproveHash);
 
-        // 2. submit.
+        // 2. submit. State flips through `submitting → awaiting-verdict →
+        // verdict-accepted/rejected` driven by receipt + on-chain poll above.
         setState("submitting");
         const submitHash = await writeContractAsync({
           address: CONTRACTS.governor,
@@ -94,8 +146,6 @@ export function useSubmitProposal() {
           args: [spec],
         });
         setTxHash(submitHash);
-
-        setState("success");
       } catch (e) {
         setError(e as Error);
         setState("error");
@@ -109,6 +159,7 @@ export function useSubmitProposal() {
     state,
     error,
     txHash,
+    proposalId,
     confirming,
     modaoBalance,
     usdcBalance,
@@ -117,6 +168,7 @@ export function useSubmitProposal() {
       !!address &&
       (modaoBalance ?? 0n) >= BOND_MODAO &&
       state !== "submitting" &&
-      state !== "approving-modao",
+      state !== "approving-modao" &&
+      state !== "awaiting-verdict",
   };
 }

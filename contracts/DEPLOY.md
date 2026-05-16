@@ -68,3 +68,34 @@ Notes:
 - `--verify` is omitted because Monad testnet's etherscan-compatible endpoint flakes during broadcast lookups. Verify after deploy with `forge verify-contract` (snippet above).
 - The script pins the existing `MODAOToken`, `MockUSDC`, and `AISwarmOracle` addresses internally. If those ever change, edit `script/RedeployGovernor.s.sol`.
 - After it succeeds, update `deployments/monad-testnet.json` with the new governor address.
+
+## Deploy the FutarchyMarketFactory (governance layer)
+
+The futarchy stack is independent of the ICO governor — it can be deployed once and reused across every launched project. Run from `contracts/`:
+
+```bash
+forge script script/DeployFutarchy.s.sol:DeployFutarchyScript \
+    --rpc-url monad_testnet \
+    --account myWallet \
+    --sender 0x37960C65118a5263fb880f105663Fd4f29aA15de \
+    --broadcast \
+    --verify \
+    --verifier sourcify \
+    --verifier-url https://sourcify-api-monad.blockvision.org \
+    -vvv
+```
+
+After it succeeds:
+
+1. Copy the `FutarchyMarketFactory:` address from the console output.
+2. Paste it into `web/src/lib/contracts.ts` → `CONTRACTS.futarchyFactory`.
+3. Add the entry to `deployments/monad-testnet.json` under `contracts`:
+
+   ```json
+   "FutarchyMarketFactory": "0x..."
+   ```
+
+Notes:
+- The script pins `MockUSDC` internally. If USDC ever moves, edit `script/DeployFutarchy.s.sol`.
+- Markets themselves are deployed on demand by `createProposal(...)` — no further deploys needed per market.
+- If `--verify` flakes, run the verify snippet above against `src/FutarchyMarketFactory.sol:FutarchyMarketFactory`.

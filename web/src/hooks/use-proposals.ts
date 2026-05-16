@@ -95,6 +95,8 @@ function shapeProposal(id: bigint, raw: OnchainProposal): Proposal {
     volumeUsd: 0,
     createdAt: new Date(startedAt || Date.now()).toISOString(),
     endsAt: new Date(endsAt || Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+    projectToken: raw.projectToken,
+    sale: raw.sale,
   };
 }
 
