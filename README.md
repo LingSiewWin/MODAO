@@ -1,67 +1,131 @@
+<div align="center">
+
+<img src="./image.png" alt="MODAO" width="600" />
+
 # MODAO
 
 **MetaDAO's fundraise mechanism, on EVM, with an AI swarm replacing the human curator.**
 
-A futarchy launchpad on Monad. Projects submit a proposal; five AI agents score it; if approved, two conditional prediction markets open (`pass_PROJECT / pass_USDC` and `fail_PROJECT / fail_USDC`); the higher-TWAP market after 3 hours wins; on PASS the project's token is minted, escrowed capital is released, and a Monad-native DEX market is born.
+[![Monad Testnet](https://img.shields.io/badge/Monad-Testnet_10143-836EF9?style=flat-square)](https://testnet.monadscan.com)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636?style=flat-square&logo=solidity)](https://soliditylang.org)
+[![Foundry](https://img.shields.io/badge/Foundry-toolchain-FFE45C?style=flat-square)](https://book.getfoundry.sh)
+[![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![viem](https://img.shields.io/badge/viem-2.x-FFC517?style=flat-square)](https://viem.sh)
+[![OpenRouter](https://img.shields.io/badge/OpenRouter-4_vendors-7C3AED?style=flat-square)](https://openrouter.ai)
+[![Pinata IPFS](https://img.shields.io/badge/IPFS-Pinata-E5530F?style=flat-square)](https://pinata.cloud)
+[![Bun](https://img.shields.io/badge/runtime-Bun_1.3-FBF0DF?style=flat-square&logo=bun&logoColor=black)](https://bun.sh)
 
-The smart contract holds the capital until the market says yes — that's the rug protection.
-
----
-
-## Status
-
-| Layer | Status |
-|---|---|
-| **Contracts** — full futarchy primitive | ✅ Deployed on Monad testnet (chain 10143) |
-| **Per-proposal `ProjectToken` mint** | ✅ Implemented; redeploy pending broadcast |
-| **AI swarm worker** | ✅ Scaffolded — 5 persona stubs await AI engineer's prompts |
-| **Frontend** | ⚠️ Landing page scaffolded; demo flow (submit → trade → finalize) not yet wired |
-| **End-to-end Foundry test** | ✅ 10/10 passing |
-| **`LaunchFactory` + post-PASS DEX migration** | ❌ Roadmap |
-| **Pitch deck + competitor analysis** | ✅ `PITCH.md`, `COMPETITORS.md` |
-
-Deployment addresses live in [`deployments/monad-testnet.json`](./deployments/monad-testnet.json).
+</div>
 
 ---
 
-## Repo layout
+## ▶ See it run
 
-```
-MODAO/
-├── contracts/              Foundry — Solidity 0.8.24, via_ir, optimizer 200 runs
-│   ├── src/                MODAOToken, MockUSDC, ProjectToken, ConditionalToken,
-│   │                       ConditionalVault, AISwarmOracle, ProposalAMM, MODAOGovernor
-│   ├── test/               Unit + end-to-end Foundry tests
-│   ├── script/             Deploy.s.sol, RedeployGovernor.s.sol
-│   └── DEPLOY.md           Keystore-based deploy runbook
-│
-├── agents/                 Off-chain AI swarm worker (TypeScript, viem, Anthropic SDK)
-│   ├── src/
-│   │   ├── personas/       ← AI engineer plugs in here (5 stub files)
-│   │   ├── orchestrate.ts  full verdict pipeline
-│   │   ├── worker.ts       event-driven loop
-│   │   └── runOnce.ts      one-shot CLI for testing
-│   └── README.md           plug-in guide
-│
-├── web/                    Next.js 15 + wagmi + RainbowKit + Tailwind v4
-│   └── src/                landing/components/lib (demo flow TBD)
-│
-├── packages/shared/        Cross-package types, ABIs, deployment addresses
-│
-├── deployments/            On-chain deployment artifacts
-│   └── monad-testnet.json  canonical address book (single source of truth)
-│
-├── PLAN.md                 architecture + decisions + roadmap
-├── PITCH.md                4-slide hackathon deck (with speaker notes)
-├── COMPETITORS.md          competitor landscape and positioning
-└── README.md               this file
+**Think hackathon peer voting — but every judge is a different AI model.** Four LLMs from Anthropic, OpenAI, and Google independently score each forked submission across the same four rubrics (origin lineage, novelty, technical merit, demo readiness). The cross-checked mean per rubric is what gets threshold-signed and posted on-chain.
+
+The same brain evaluates **every** fork of `monad-developers/monad-blitz-kl` — no per-project setup, no hardcoded list. As new submissions land, the worker watches `ProposalSubmitted` on-chain and scores whatever GitHub URL the submitter pinned.
+
+Run it locally against any fork:
+
+```bash
+cd agents
+bun run dry <github-url>
 ```
 
+To see the brain across the current hackathon cohort, the table below picks three real submissions at different quality levels. Same prompt, same rubrics — the panel discriminates honestly:
+
+| Submission | origin | novelty | tech | demo | **aggregate** | verdict |
+|---|---:|---:|---:|---:|---:|---|
+| [`mhrk04/crank-foodie`](https://github.com/mhrk04/crank-foodie) — restaurant hygiene on-chain | 91 | 79 | 67 | 63 | **75** | ✅ accept (≥60) |
+| [`wwaiyyee/memetaverse`](https://github.com/wwaiyyee/memetaverse) — `create-next-app` boilerplate, no contracts | 15 | 5 | 0 | 2 | **6** | ❌ reject |
+| [`chiwjieren/hiveguard`](https://github.com/chiwjieren/hiveguard) — README + screenshots only | 15 | 0 | 5 | 0 | **5** | ❌ reject |
+
+Sample output for the accepted one (wall-clock 41s, 4-model OpenRouter call + Pinata pinning + EIP-712 signing):
+
+```
+⏱  START  2026-05-16T08:16:48.836Z
+▸ panel: claude-haiku, claude-sonnet, gpt-4.1, gemini-2.5-flash
+▸ target: https://github.com/mhrk04/crank-foodie
+
+[dry] fork check: PASS — parent=monad-developers/monad-blitz-kl  (762ms)
+
+  [gpt-4.1         ] openai/gpt-4.1                      avg=89  (origin=97 novelty=92 tech=86 demo=82)   7.9s
+  [gemini-2.5-flash] google/gemini-2.5-flash             avg=81  (origin=95 novelty=85 tech=70 demo=75)   8.8s
+  [claude-haiku    ] anthropic/claude-haiku-4.5          avg=56  (origin=78 novelty=62 tech=45 demo=38)  15.4s
+  [claude-sonnet   ] anthropic/claude-sonnet-4.5         avg=73  (origin=92 novelty=78 tech=65 demo=58)  38.8s
+
+Per-rubric (mean across panel, failed members = 0):
+  origin   ██████████████████··  91/100
+  novelty  ████████████████····  79/100
+  tech     █████████████·······  67/100
+  demo     █████████████·······  63/100
+
+Aggregate:  75/100   (above on-chain minScore=60 → admission-worthy ✅)
+4 IPFS pins · 4 EIP-712 sigs · ready for submitVerdictAndOpen
+```
+
+Each agent's reasoning is content-addressed on IPFS — paste the CID into [gateway.pinata.cloud](https://gateway.pinata.cloud) to read what each model wrote.
+
 ---
 
-## Running the pieces
+## Architecture
 
-Monorepo uses **bun** workspaces. First-time setup:
+```mermaid
+flowchart LR
+    Submitter([Submitter wallet])
+    Traders([Public traders])
+    GitHub[(GitHub<br/>fork)]
+    IPFS[(Pinata<br/>IPFS)]
+    OR{{OpenRouter}}
+
+    subgraph Brain["AI Agent Worker (off-chain Bun)"]
+        direction TB
+        Watcher[Event<br/>watcher]
+        Panel[4-model panel<br/>4 rubrics each]
+        Bundle[EIP-712<br/>signer]
+        Watcher --> Panel --> Bundle
+    end
+
+    subgraph Onchain["Monad Testnet (chainId 10143)"]
+        direction TB
+        Gov[MODAOGovernor]
+        Oracle[AISwarmOracle<br/>3-of-4 threshold]
+        Sale[LaunchSale<br/>per proposal]
+        Token[ProjectToken<br/>per proposal]
+    end
+
+    Submitter -->|submitProposal + 100 MODAO| Gov
+    Gov -->|ProposalSubmitted| Watcher
+    Panel -->|repo fetch| GitHub
+    Panel -->|4 parallel calls| OR
+    Panel -->|pin reasoning| IPFS
+    Bundle -->|submitVerdictAndOpen| Gov
+    Gov -->|verify sigs| Oracle
+    Gov -->|score ≥ 60| Token
+    Gov -->|on accept| Sale
+    Traders -->|commit USDC| Sale
+```
+
+**The brain (Option B cross-rubric)**: every model evaluates every rubric in one structured-output call. Per-rubric score = mean across 4 models. A single hallucination is dampened by the other three reads.
+
+---
+
+## Tech stack
+
+| Layer | Package | Tech | Why |
+|---|---|---|---|
+| Contracts | `contracts/` | Solidity 0.8.24 · Foundry · OpenZeppelin · via_ir | Test-driven; full lifecycle covered by Foundry suite |
+| AI brain | `agents/` | TypeScript · Bun · viem · OpenAI SDK → OpenRouter · zod · Pinata | One key, four labs (Anthropic, OpenAI, Google) for heterogeneity |
+| Frontend | `web/` | Next.js 15 · React 19 · Wagmi v2 · RainbowKit · Tailwind v4 · Shadcn | Sub-second feel via `useSendTransactionSync` |
+| Shared | `packages/shared/` | TypeScript · viem types · ABI re-exports | Single source of truth (`deployments/monad-testnet.json`) |
+| Indexer | — | HyperIndex (Envio) | Deferred — currently RPC-scan from frontend |
+
+---
+
+## Quick start
+
+Monorepo uses **Bun workspaces**. First-time setup:
 
 ```bash
 bun install
@@ -75,19 +139,22 @@ forge build
 forge test
 ```
 
-Deploy or redeploy: see [`contracts/DEPLOY.md`](./contracts/DEPLOY.md).
+Deploy/redeploy runbook: [`contracts/DEPLOY.md`](./contracts/DEPLOY.md). Latest addresses in [`deployments/monad-testnet.json`](./deployments/monad-testnet.json).
 
-### Agent worker
+### AI agent worker
 
 ```bash
 cd agents
 cp .env.example .env
-# fill ANTHROPIC_API_KEY and SUBMITTER_PRIVATE_KEY
-bun run once <proposalId>    # one-shot mode for testing
-bun run watch                # long-lived event watcher
+# Fill: OPENROUTER_API_KEY, PINATA_JWT, SUBMITTER_PRIVATE_KEY
+#       Optional: GITHUB_TOKEN (raises REST limit 60→5000/hr)
+
+bun run dry <github-url>     # dry-run — score a fork, no on-chain submit
+bun run worker                # long-lived event watcher (production mode)
+bun run once <proposalId>    # one-shot — score + submit for a known proposal
 ```
 
-The 5 agent signing keys are derived deterministically from a shared seed — they already match the addresses registered in `AISwarmOracle`. The AI engineer only edits `agents/src/personas/*.ts`.
+Agent signing keys are derived deterministically from a shared seed; they already match the addresses Sean registered in `AISwarmOracle`. **No manual key management.**
 
 ### Frontend
 
@@ -98,80 +165,52 @@ bun run dev    # http://localhost:3000
 
 ---
 
-## Mechanism in one diagram
+## Repo layout
 
 ```
-                  Proposer submits proposal
-                  (pays bond in MODAO + USDC)
-                              │
-                              ▼
-                ┌──────────────────────────┐
-                │   AISwarmOracle          │
-                │   3-of-5 threshold sig   │  ← off-chain agent worker
-                │   over (id, score,       │     signs EIP-712 verdict
-                │   reasoningHash, dl)     │
-                └──────────┬───────────────┘
-                           │ on accept
-                           ▼
-              ┌─────────────────────────────┐
-              │  Governor._openMarkets       │
-              │  - deploys ProjectToken      │
-              │  - splits full supply into   │
-              │    pass_PROJECT + fail_PROJ  │
-              │  - seeds both AMMs           │
-              └──────────┬───────────────────┘
-                         │
-            ┌────────────┴────────────┐
-            ▼                         ▼
-     PASS pool                   FAIL pool
-   pass_PROJECT / pass_USDC      fail_PROJECT / fail_USDC
-            │                         │
-            └────────────┬────────────┘
-                         │  3h trading window
-                         ▼
-                   TWAP comparison
-                   higher side wins
-                         │
-                ┌────────┴────────┐
-                ▼                 ▼
-              PASS              FAIL
-   pass_PROJECT redeems    fail_USDC redeems
-   1:1 to real PROJECT     1:1 to USDC (refund)
-   ProjectLaunched event   project gets nothing
+MODAO/
+├── contracts/                  Foundry — Solidity 0.8.24, via_ir, optimizer 200 runs
+│   ├── src/                    MODAOGovernor, AISwarmOracle, LaunchSale, ProjectToken,
+│   │                           ConditionalVault, ProposalAMM, MODAOToken, MockUSDC
+│   ├── test/                   Foundry unit + end-to-end (13/13 green on v3)
+│   └── script/                 Deploy.s.sol, RedeployGovernor.s.sol
+│
+├── agents/                     Off-chain AI swarm — TypeScript + Bun
+│   └── src/
+│       ├── personas/
+│       │   ├── panel.ts         4 model declarations (paid + free fallbacks)
+│       │   ├── rubric.ts        shared 4-rubric system prompt + zod schema
+│       │   ├── _callModel.ts    OpenRouter call with per-call sentinel nonce
+│       │   └── _prompt.ts       proposal → markdown w/ untrusted-README wrap
+│       ├── github.ts            REST client + buildRepoBundle
+│       ├── forkCheck.ts         lineage check vs monad-developers/monad-blitz-kl
+│       ├── ipfs.ts              Pinata pinning (per-agent reasoning)
+│       ├── prepare.ts           enrichContext + SSRF-guarded URL extraction
+│       ├── orchestrate.ts       scoreProposal pure + runVerdict live
+│       ├── runDryEval.ts        CLI dry-run with timing report
+│       ├── worker.ts            event watcher
+│       └── chain.ts             lazy wallet (dry-run needs no submitter key)
+│
+├── web/                        Next.js 15 — landing + create + proposals + dao
+│   └── src/
+│       ├── app/                 routes: /, /create, /proposals, /proposals/[id], /dao
+│       └── components/          brand, landing, layout, proposals, ui
+│
+├── packages/shared/            Cross-package types, ABIs, deployment addresses
+├── deployments/                On-chain deployment artifacts
+│   └── monad-testnet.json      canonical address book — single source of truth
+│
+├── PLAN.md                     architecture decisions + roadmap
+├── PITCH.md                    4-slide hackathon deck
+└── COMPETITORS.md              competitor landscape
 ```
 
 ---
 
-## Where the money goes
+<div align="center">
 
-| Layer | Source | Purpose | Status in MVP |
-|---|---|---|---|
-| **Proposer bond** | Project team | Anti-spam stake (MODAO) + initial USDC LP | ✅ |
-| **Public deposits** | Retail traders during market window | The actual fundraise — capital released to project on PASS | ⚠️ Contract supports it; UI doesn't surface it |
-| **Treasury match** | MODAO protocol | Optional liquidity depth bumper | ❌ Cut for MVP |
-| **Launch fee** | % of raised USDC on PASS | Protocol revenue to MODAO holders | ❌ Roadmap |
+**Built for [Monad Blitz Kuala Lumpur](https://blitz.devnads.com)**
 
-MODAO is **not** a trading-pair base token. It's the protocol token: anti-spam bond + future fee capture + protocol governance.
+Fork of [`monad-developers/monad-blitz-kl`](https://github.com/monad-developers/monad-blitz-kl)
 
----
-
-## Why Monad
-
-The mechanism only works on a chain that is *both* EVM-compatible *and* fast enough for futarchy markets. See [`PLAN.md` § Why Monad](./PLAN.md) and [`PITCH.md` slide 4](./PITCH.md) for the full case.
-
----
-
-## Further reading
-
-- [`PLAN.md`](./PLAN.md) — full architecture, design decisions, hackathon MVP scope, post-hackathon roadmap
-- [`PITCH.md`](./PITCH.md) — 4-slide pitch deck with speaker notes and Q&A prep
-- [`COMPETITORS.md`](./COMPETITORS.md) — competitor table, positioning thesis, logo-fetching guide
-- [`contracts/DEPLOY.md`](./contracts/DEPLOY.md) — deploy + redeploy runbook
-- [`agents/README.md`](./agents/README.md) — AI engineer plug-in guide
-- [`deployments/monad-testnet.json`](./deployments/monad-testnet.json) — deployed addresses, agent set, EIP-712 domain
-
----
-
-## Monad Blitz Kuala Lumpur — submission info
-
-This repo is a fork of `monad-developers/monad-blitz-kl`. Final submission goes through the [Blitz Portal](https://blitz.devnads.com).
+</div>
