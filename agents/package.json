@@ -3,11 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "src/index.ts",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "watch": "tsx watch src/worker.ts",
+    "worker": "tsx src/worker.ts",
+    "once": "tsx src/runOnce.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
