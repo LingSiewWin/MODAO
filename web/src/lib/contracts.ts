@@ -134,6 +134,13 @@ export const governorAbi = [
 // ----------------------------------------------------------------------------
 
 export const proposalAmmAbi = [
+  // ---- views ----
+  { type: "function", name: "reserve0", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "reserve1", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "token0", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "token1", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "blockTimestampLast", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
+  { type: "function", name: "price0CumulativeLast", inputs: [], outputs: [{ type: "uint256" }], stateMutability: "view" },
   {
     type: "function",
     name: "snapshotCumulative",
@@ -145,20 +152,52 @@ export const proposalAmmAbi = [
     type: "function",
     name: "consultTWAP",
     inputs: [
-      { name: "cumulativeAtStart", type: "uint256" },
-      { name: "startedAt", type: "uint256" },
+      { name: "sinceCumulative", type: "uint256" },
+      { name: "sinceTimestamp", type: "uint256" },
     ],
     outputs: [{ type: "uint256" }],
     stateMutability: "view",
   },
+  // ---- writes ----
   {
     type: "function",
-    name: "reserves",
-    inputs: [],
-    outputs: [{ type: "uint256" }, { type: "uint256" }],
-    stateMutability: "view",
+    name: "swap",
+    inputs: [
+      { name: "zeroForOne", type: "bool" },
+      { name: "amountIn", type: "uint256" },
+      { name: "amountOutMin", type: "uint256" },
+      { name: "to", type: "address" },
+    ],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  // ---- events ----
+  {
+    type: "event",
+    name: "Swap",
+    inputs: [
+      { name: "sender", type: "address", indexed: true },
+      { name: "amount0In", type: "uint256", indexed: false },
+      { name: "amount1In", type: "uint256", indexed: false },
+      { name: "amount0Out", type: "uint256", indexed: false },
+      { name: "amount1Out", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Sync",
+    inputs: [
+      { name: "reserve0", type: "uint256", indexed: false },
+      { name: "reserve1", type: "uint256", indexed: false },
+    ],
   },
 ] as const;
+
+// PRICE_SCALE used by the AMM's cumulative-price math (1e18).
+export const AMM_PRICE_SCALE = 10n ** 18n;
+// Constant the contract uses for the conditional MODAO and USDC decimals.
+export const MODAO_DECIMALS = 18;
+export const USDC_DECIMALS = 6;
 
 // ----------------------------------------------------------------------------
 // ERC20 — MODAOToken and MockUSDC share the standard surface we need

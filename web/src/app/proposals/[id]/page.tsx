@@ -9,6 +9,7 @@ import { TwapBar } from "@/components/proposals/TwapBar";
 import { ProposalCountdown } from "@/components/proposals/ProposalCountdown";
 import { ConditionalMarketCard } from "@/components/markets/ConditionalMarketCard";
 import { useProposal } from "@/hooks/use-proposals";
+import { useProposalMarkets } from "@/hooks/use-proposal-markets";
 import { MOCK_PROPOSALS } from "@/lib/mock-data";
 import { formatUsd, cn } from "@/lib/utils";
 
@@ -19,6 +20,7 @@ export default function ProposalDetailPage({
 }) {
   const { id } = use(params);
   const { proposal: onchain, isLoading } = useProposal(id);
+  const markets = useProposalMarkets(onchain ? id : undefined);
   // Fallback to mock if id matches a demo proposal — keeps the layout viewable
   // before any real proposals exist on chain.
   const fallback = MOCK_PROPOSALS.find((p) => p.id === id);
@@ -142,8 +144,38 @@ export default function ProposalDetailPage({
         </aside>
 
         <div className="space-y-4">
-          <ConditionalMarketCard side="pass" twap={proposal.passTwap} winning={passWinning} />
-          <ConditionalMarketCard side="fail" twap={proposal.failTwap} winning={!passWinning} />
+          <ConditionalMarketCard
+            side="pass"
+            twap={markets.isOpen ? markets.pass.twap : proposal.passTwap}
+            winning={passWinning}
+            live={
+              markets.isOpen
+                ? {
+                    reserve0: markets.pass.reserve0,
+                    reserve1: markets.pass.reserve1,
+                    spot: markets.pass.spot,
+                    asks: markets.pass.asks,
+                    bids: markets.pass.bids,
+                  }
+                : undefined
+            }
+          />
+          <ConditionalMarketCard
+            side="fail"
+            twap={markets.isOpen ? markets.fail.twap : proposal.failTwap}
+            winning={!passWinning}
+            live={
+              markets.isOpen
+                ? {
+                    reserve0: markets.fail.reserve0,
+                    reserve1: markets.fail.reserve1,
+                    spot: markets.fail.spot,
+                    asks: markets.fail.asks,
+                    bids: markets.fail.bids,
+                  }
+                : undefined
+            }
+          />
 
           <Card className="p-5">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-faint mb-2">
