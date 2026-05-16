@@ -63,20 +63,20 @@ export interface TradeParams {
   passAmm: Address;
   failAmm: Address;
   usdcVault: Address;
-  modaoVault: Address;
+  projectVault: Address;
 }
 
 export function useTradeProposal({
   passAmm,
   failAmm,
   usdcVault,
-  modaoVault,
+  projectVault,
   side,
 }: {
   passAmm?: Address;
   failAmm?: Address;
   usdcVault?: Address;
-  modaoVault?: Address;
+  projectVault?: Address;
   side: "pass" | "fail";
 }) {
   const { address } = useAccount();
@@ -89,7 +89,7 @@ export function useTradeProposal({
 
   const amm = side === "pass" ? passAmm : failAmm;
   const enabled =
-    !!address && !!amm && amm !== zeroAddress && !!usdcVault && !!modaoVault;
+    !!address && !!amm && amm !== zeroAddress && !!usdcVault && !!projectVault;
 
   // Resolve conditional-token addresses on demand: vault.{side}Token().
   const { data: tokenReads } = useReadContracts({
@@ -101,7 +101,7 @@ export function useTradeProposal({
             functionName: side === "pass" ? "passToken" : "failToken",
           },
           {
-            address: modaoVault!,
+            address: projectVault!,
             abi: conditionalVaultAbi,
             functionName: side === "pass" ? "passToken" : "failToken",
           },
@@ -141,7 +141,7 @@ export function useTradeProposal({
         setStep("error");
         return;
       }
-      if (!amm || !usdcVault || !modaoVault) {
+      if (!amm || !usdcVault || !projectVault) {
         setError(new Error("This proposal's markets are not open yet."));
         setStep("error");
         return;
@@ -266,7 +266,7 @@ export function useTradeProposal({
       address,
       amm,
       usdcVault,
-      modaoVault,
+      projectVault,
       conditionalUsdc,
       conditionalModao,
       publicClient,

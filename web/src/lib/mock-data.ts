@@ -8,6 +8,7 @@ export const MOCK_PROPOSALS: Proposal[] = [
     id: "prop_001",
     number: 12,
     title: "Launch Hyperlend on MoDAO",
+    symbol: "HLEND",
     description:
       "Hyperlend is an isolated-pool money market for Monad. We're requesting platform listing with a $500k raise via bonding curve, 70% to LP, 20% to team (4-year vest), 10% to community airdrop.",
     descriptionUrl: "https://modao.fi/proposals/12",
@@ -25,6 +26,7 @@ export const MOCK_PROPOSALS: Proposal[] = [
     id: "prop_002",
     number: 11,
     title: "Launch Pulse Perps on MoDAO",
+    symbol: "PULSE",
     description:
       "Pulse is a perpetuals DEX targeting Monad-native liquidity. Seeking $750k raise, on-chain oracle from Redstone, 60/30/10 LP/team/community split.",
     descriptionUrl: "https://modao.fi/proposals/11",
@@ -42,6 +44,7 @@ export const MOCK_PROPOSALS: Proposal[] = [
     id: "prop_003",
     number: 10,
     title: "Launch Anchor Stable on MoDAO",
+    symbol: "ANCHR",
     description:
       "Over-collateralized stablecoin backed by MON + LSTs. $1M raise, vault liquidations gated by Chainlink price feed.",
     descriptionUrl: "https://modao.fi/proposals/10",
@@ -59,6 +62,7 @@ export const MOCK_PROPOSALS: Proposal[] = [
     id: "prop_004",
     number: 9,
     title: "Launch Kettle NFT Marketplace",
+    symbol: "KETTL",
     description:
       "Royalty-enforcing NFT marketplace with on-chain order matching. $300k raise.",
     descriptionUrl: "https://modao.fi/proposals/9",

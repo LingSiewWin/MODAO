@@ -125,14 +125,14 @@ contract EndToEndTest is Test {
         assertEq(uint256(p.status), uint256(MODAOGovernor.Status.Finalized));
         assertEq(uint256(p.outcome), uint256(ConditionalVault.Outcome.Pass));
 
-        // 7. Trader can redeem pass_MODAO 1:1 for MODAO
-        uint256 passMBal = IERC20(address(p.modaoVault.passToken())).balanceOf(trader);
-        if (passMBal > 0) {
-            uint256 modaoBefore = modao.balanceOf(trader);
-            vm.prank(trader);
-            p.modaoVault.redeem(passMBal);
-            assertEq(modao.balanceOf(trader), modaoBefore + passMBal);
-        }
+        // 7. Trader can redeem pass_PROJECT 1:1 for the real project ERC20
+        uint256 passProjectBal = IERC20(address(p.projectVault.passToken())).balanceOf(trader);
+        assertGt(passProjectBal, 0);
+        IERC20 projectToken = IERC20(p.projectToken);
+        uint256 projectBefore = projectToken.balanceOf(trader);
+        vm.prank(trader);
+        p.projectVault.redeem(passProjectBal);
+        assertEq(projectToken.balanceOf(trader), projectBefore + passProjectBal);
     }
 
     function test_VerdictRejectedScoreBelowMin() public {
@@ -140,7 +140,7 @@ contract EndToEndTest is Test {
         modao.approve(address(governor), 100e18);
         usdc.approve(address(governor), 100e6);
         uint256 pid = governor.submitProposal(
-            MODAOGovernor.ProjectSpec({name: "Rug", symbol: "RUG", supply: 0, descriptionURI: ""})
+            MODAOGovernor.ProjectSpec({name: "Rug", symbol: "RUG", supply: 1_000e18, descriptionURI: ""})
         );
         vm.stopPrank();
 
@@ -159,7 +159,7 @@ contract EndToEndTest is Test {
         modao.approve(address(governor), 100e18);
         usdc.approve(address(governor), 100e6);
         uint256 pid = governor.submitProposal(
-            MODAOGovernor.ProjectSpec({name: "X", symbol: "X", supply: 0, descriptionURI: ""})
+            MODAOGovernor.ProjectSpec({name: "X", symbol: "X", supply: 1_000e18, descriptionURI: ""})
         );
         vm.stopPrank();
 

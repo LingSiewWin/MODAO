@@ -1,7 +1,37 @@
 # MODAO Implementation Plan
 
-> Futarchy governance + AI-swarm proposal review on Monad.
-> Inspired by MetaDAO (Solana). Rebuilt in Solidity for the EVM world.
+> Futarchy launchpad + AI-swarm proposal review on Monad.
+> Inspired by MetaDAO's fundraise product (Solana). Rebuilt in Solidity for the EVM world.
+
+---
+
+## Implementation status (current)
+
+| Layer | Status | Notes |
+|---|---|---|
+| `MODAOToken`, `MockUSDC` | ✅ Deployed on Monad testnet | Token addresses pinned in `deployments/monad-testnet.json` |
+| `AISwarmOracle` | ✅ Deployed + 5 agents registered | Threshold 3-of-5, minScore 60 |
+| `ConditionalToken`, `ConditionalVault`, `ProposalAMM` | ✅ Built + tested | Generic primitives; reused per proposal |
+| `ProjectToken` (per-proposal ERC20) | ✅ Built | Deployed by governor at market-open time |
+| `MODAOGovernor` | ✅ **Redeployed** with corrected design | See "Design correction" below |
+| End-to-end Foundry test | ✅ 10/10 passing | Full lifecycle covered |
+| Agent worker scaffold | ✅ Plug-in shape | AI engineer fills `agents/src/personas/*.ts` |
+| Frontend demo flow | ⚠️ Landing page only | Submit / trade / finalize UI TBD |
+| `LaunchFactory` + post-PASS DEX migration | ❌ Roadmap | Cut for hackathon scope |
+| Treasury contract + match | ❌ Roadmap | Cut for hackathon scope |
+
+## Design correction (mid-build)
+
+**Original Phase-1 decision (since corrected):** MODAO would be the base token in every conditional market, paired against USDC. This was the *governance-futarchy* model (the one MetaDAO uses for DAO treasury votes).
+
+**Corrected design:** MODAO is **not** in any conditional trading pair. Each proposal mints its own ERC20 (`ProjectToken`); conditional markets trade `pass_PROJECT / pass_USDC`. This is the *fundraise-futarchy* model — what MetaDAO uses for actual project launches (e.g. P2P Protocol). Verified directly against [docs.metadao.fi](https://docs.metadao.fi).
+
+**MODAO's actual role**, post-correction:
+- Anti-spam proposer bond
+- Future launch-fee capture (% of raised USDC on PASS)
+- Protocol governance
+
+**Why this matters:** the trading-pair conclusion changes nothing about contract primitives (`ConditionalVault`, `ProposalAMM`) but does change governor orchestration. `MODAOGovernor._openMarkets` now deploys a `ProjectToken`, deposits the full supply into a conditional vault, and seeds AMMs with `pass_PROJECT / pass_USDC` instead of `pass_MODAO / pass_USDC`. Redeployed; agents preserved.
 
 ---
 

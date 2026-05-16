@@ -76,7 +76,8 @@ export const MODAO_GOVERNOR_ABI = [
     name: "MarketsOpened",
     inputs: [
       { name: "proposalId", type: "uint256", indexed: true },
-      { name: "modaoVault", type: "address", indexed: false },
+      { name: "projectToken", type: "address", indexed: false },
+      { name: "projectVault", type: "address", indexed: false },
       { name: "usdcVault", type: "address", indexed: false },
       { name: "passAmm", type: "address", indexed: false },
       { name: "failAmm", type: "address", indexed: false },
@@ -90,6 +91,18 @@ export const MODAO_GOVERNOR_ABI = [
       { name: "outcome", type: "uint8", indexed: false },
       { name: "passTwap", type: "uint256", indexed: false },
       { name: "failTwap", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "ProjectLaunched",
+    inputs: [
+      { name: "proposalId", type: "uint256", indexed: true },
+      { name: "projectToken", type: "address", indexed: false },
+      { name: "name", type: "string", indexed: false },
+      { name: "symbol", type: "string", indexed: false },
+      { name: "supply", type: "uint256", indexed: false },
+      { name: "descriptionURI", type: "string", indexed: false },
     ],
   },
   {
@@ -117,7 +130,8 @@ export const MODAO_GOVERNOR_ABI = [
           { name: "proposer", type: "address" },
           { name: "status", type: "uint8" },
           { name: "outcome", type: "uint8" },
-          { name: "modaoVault", type: "address" },
+          { name: "projectToken", type: "address" },
+          { name: "projectVault", type: "address" },
           { name: "usdcVault", type: "address" },
           { name: "passAmm", type: "address" },
           { name: "failAmm", type: "address" },
