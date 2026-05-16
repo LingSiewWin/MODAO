@@ -3,105 +3,153 @@ import { config } from "./config.js";
 import { deriveAgentAccount, verifyAgentSet } from "./keys.js";
 import { reasoningHash, signVerdict, sortBundle, type AgentVerdict } from "./signing.js";
 import { governor, oracle, loadProposal, type ProposalContext } from "./chain.js";
-import { PERSONAS, callModel, type PersonaVerdict, type Persona } from "./personas/index.js";
+import {
+  PANEL,
+  callModel,
+  RUBRIC_KEYS,
+  type PanelMember,
+  type PanelVerdict,
+  type RubricKey,
+} from "./personas/index.js";
 import { pinReasoning, type PinResult } from "./ipfs.js";
 import { enrichContext, extractGithubFromUri } from "./prepare.js";
 
-export interface PerAgentResult {
-  persona: Persona;
+export interface PerMemberResult {
+  member: PanelMember;
   index: number;
-  verdict: PersonaVerdict;
+  verdict: PanelVerdict;
+  durationMs: number;
   pin: PinResult | null; // null if PINATA_JWT not set or pin failed
 }
 
 export interface ScoredProposal {
   proposalId: bigint;
-  aggregateScore: number;
+  perRubric: Record<RubricKey, number>; // mean across all members, missing = 0
+  aggregateScore: number; // arithmetic mean of perRubric values
   reasoningBlob: string;
   rHash: `0x${string}`;
   deadline: bigint;
-  perAgent: PerAgentResult[];
+  perMember: PerMemberResult[];
   signed: AgentVerdict[];
   sortedSigs: `0x${string}`[];
+  totalDurationMs: number; // wall-clock for the parallel score phase
 }
 
 /**
- * Pure scoring pipeline — runs the swarm and produces a signed bundle, but does
+ * Pure scoring pipeline — runs the panel and produces a signed bundle, but does
  * NOT touch the chain. Shared between the live worker (runVerdict) and the
- * dry-run CLI (runDryEval). Pinata pinning is opt-in: when PINATA_JWT is set
- * each agent's reasoning is pinned independently for audit; when missing the
- * pipeline still completes (with pin: null) so the brain stays demoable offline.
+ * dry-run CLI (runDryEval).
  *
- * Returns null if fewer than ORACLE_THRESHOLD personas succeeded.
+ * Option B architecture: every panel member evaluates ALL FOUR rubrics in one
+ * call. Per-rubric score = mean across members. Failed members count as 0
+ * (per audit C3) so a member that JSON-breaks can't be silently dropped — it
+ * drags the mean down honestly.
+ *
+ * Returns null if fewer than ORACLE_THRESHOLD members succeeded.
  */
 export async function scoreProposal(ctx: ProposalContext): Promise<ScoredProposal | null> {
   console.log(
     `[swarm] scoring proposal ${ctx.proposalId}: ${ctx.name} (${ctx.symbol}) — ${ctx.githubUrl ?? "(no github url)"}`,
   );
 
-  const personaResults = await Promise.all(
-    PERSONAS.slice(0, config.activeAgentCount).map(async (persona, i) => {
+  const phaseStart = performance.now();
+  const memberResults = await Promise.all(
+    PANEL.slice(0, config.activeAgentCount).map(async (member, i) => {
       try {
-        const verdict = await callModel(persona, ctx);
-        console.log(`  [${persona.name}] (${persona.model}) score=${verdict.score}`);
-        return { persona, index: i, verdict };
+        const { verdict, durationMs } = await callModel(member, ctx);
+        const avg = Math.round(
+          (verdict.origin.score + verdict.novelty.score + verdict.tech.score + verdict.demo.score) /
+            4,
+        );
+        console.log(
+          `  [${member.name.padEnd(13)}] ${member.model.padEnd(50)} avg=${avg.toString().padStart(3)}  (origin=${verdict.origin.score} novelty=${verdict.novelty.score} tech=${verdict.tech.score} demo=${verdict.demo.score})  ${durationMs.toFixed(0).padStart(5)}ms`,
+        );
+        return { member, index: i, verdict, durationMs };
       } catch (err) {
-        console.error(`  [${persona.name}] FAILED: ${(err as Error).message}`);
+        console.error(`  [${member.name}] FAILED: ${(err as Error).message.slice(0, 200)}`);
         return null;
       }
     }),
   );
+  const totalDurationMs = performance.now() - phaseStart;
 
-  const successful = personaResults.filter(
-    (r): r is { persona: Persona; index: number; verdict: PersonaVerdict } => r !== null,
+  const successful = memberResults.filter(
+    (r): r is { member: PanelMember; index: number; verdict: PanelVerdict; durationMs: number } =>
+      r !== null,
   );
 
   if (successful.length < ORACLE_THRESHOLD) {
-    console.error(`[swarm] only ${successful.length}/${ORACLE_THRESHOLD} personas succeeded — aborting`);
+    console.error(
+      `[swarm] only ${successful.length}/${ORACLE_THRESHOLD} members succeeded — aborting`,
+    );
     return null;
   }
 
-  // C3 fix: divide by activeAgentCount (not successful.length) so failed
-  // personas count as 0. Otherwise a malicious submitter who crafts input that
-  // JSON-breaks the strictest model (e.g. tech-monad) gets credit for an
-  // average of only the lenient survivors.
+  // Per-rubric mean. Failed members count as 0 across all rubrics
+  // (C3 fix: divide by activeAgentCount, not successful.length).
+  const perRubric: Record<RubricKey, number> = { origin: 0, novelty: 0, tech: 0, demo: 0 };
+  for (const rubric of RUBRIC_KEYS) {
+    const sum = successful.reduce((acc, r) => acc + r.verdict[rubric].score, 0);
+    perRubric[rubric] = Math.round(sum / config.activeAgentCount);
+  }
   const aggregateScore = Math.round(
-    successful.reduce((sum, r) => sum + r.verdict.score, 0) / config.activeAgentCount,
+    (perRubric.origin + perRubric.novelty + perRubric.tech + perRubric.demo) / 4,
   );
+
+  // Reasoning blob: per-member then per-rubric — gives a reviewer a 1D scroll
+  // through what each model said about each dimension.
   const reasoningBlob = successful
-    .map((r) => `[${r.persona.name}] (score=${r.verdict.score}) ${r.verdict.reasoning}`)
-    .join("\n---\n");
+    .map((r) =>
+      [
+        `## ${r.member.name} (${r.member.model})  duration=${r.durationMs.toFixed(0)}ms`,
+        ...RUBRIC_KEYS.map(
+          (k) => `### ${k} — score=${r.verdict[k].score}\n${r.verdict[k].reasoning}`,
+        ),
+      ].join("\n\n"),
+    )
+    .join("\n\n---\n\n");
   const rHash = reasoningHash(reasoningBlob);
   const deadline = BigInt(Math.floor(Date.now() / 1000) + config.verdictDeadlineSeconds);
 
-  // Pin each agent's reasoning separately for audit. Optional: skipped if no
-  // PINATA_JWT. Errors are logged but non-fatal — the threshold-signed bundle
-  // is the trustless artifact; the pins are auxiliary evidence.
+  // Pin each member's full multi-rubric reasoning to Pinata (non-fatal if
+  // PINATA_JWT unset). The pin captures all 4 rubrics for that member.
   const pins: (PinResult | null)[] = await Promise.all(
     successful.map(async (r) => {
       if (!process.env.PINATA_JWT) return null;
       try {
-        return await pinReasoning(r.verdict.reasoning, {
-          personaName: r.persona.name,
-          model: r.persona.model,
-          score: r.verdict.score,
+        const memberBlob = RUBRIC_KEYS.map(
+          (k) => `## ${k} — score=${r.verdict[k].score}\n${r.verdict[k].reasoning}`,
+        ).join("\n\n");
+        return await pinReasoning(memberBlob, {
+          personaName: r.member.name,
+          model: r.member.model,
+          score: Math.round(
+            (r.verdict.origin.score +
+              r.verdict.novelty.score +
+              r.verdict.tech.score +
+              r.verdict.demo.score) /
+              4,
+          ),
           proposalId: ctx.proposalId.toString(),
         });
       } catch (err) {
-        console.error(`  [${r.persona.name}] pin failed: ${(err as Error).message}`);
+        console.error(`  [${r.member.name}] pin failed: ${(err as Error).message}`);
         return null;
       }
     }),
   );
 
-  const perAgent: PerAgentResult[] = successful.map((r, idx) => ({
-    persona: r.persona,
+  const perMember: PerMemberResult[] = successful.map((r, idx) => ({
+    member: r.member,
     index: r.index,
     verdict: r.verdict,
+    durationMs: r.durationMs,
     pin: pins[idx] ?? null,
   }));
 
-  console.log(`[swarm] aggregate score=${aggregateScore} deadline=${deadline} rHash=${rHash}`);
+  console.log(
+    `[swarm] perRubric=${JSON.stringify(perRubric)} aggregate=${aggregateScore} wall=${totalDurationMs.toFixed(0)}ms`,
+  );
 
   const signed: AgentVerdict[] = await Promise.all(
     successful.map((r) =>
@@ -112,13 +160,15 @@ export async function scoreProposal(ctx: ProposalContext): Promise<ScoredProposa
 
   return {
     proposalId: ctx.proposalId,
+    perRubric,
     aggregateScore,
     reasoningBlob,
     rHash,
     deadline,
-    perAgent,
+    perMember,
     signed,
     sortedSigs,
+    totalDurationMs,
   };
 }
 
@@ -126,12 +176,9 @@ export async function scoreProposal(ctx: ProposalContext): Promise<ScoredProposa
  * Live pipeline: load on-chain spec → extract GitHub URL from descriptionURI →
  * enrich with repo data → score → submit. Worker mode.
  *
- * If fork-check fails (not a Monad Blitz fork, or repo unreachable), the swarm
- * SHORT-CIRCUITS: no OpenRouter credits spent, a synthetic FAIL verdict (score=0)
- * is signed by all agents and submitted on-chain. This records the verdict so
- * the proposal can't be retried, and the `minScore=60` gate keeps it out of
- * markets. Cost discipline: an attacker spamming non-fork proposals burns
- * submitter-wallet gas but no model spend.
+ * Short-circuits with a synthetic 0-score FAIL bundle when (a) descriptionURI
+ * has no GitHub URL, (b) enrichContext throws, or (c) forkCheck rejects the
+ * lineage. No model calls billed for those paths.
  */
 export async function runVerdict(proposalId: bigint): Promise<`0x${string}` | null> {
   const already = await oracle.read.verdictRecorded([proposalId]);
@@ -153,7 +200,9 @@ export async function runVerdict(proposalId: bigint): Promise<`0x${string}` | nu
   let proposal: ProposalContext;
   try {
     const { context, forkCheck } = await enrichContext({ ...base, githubUrl });
-    console.log(`[swarm] fork check: ${forkCheck.ok ? "PASS" : "FAIL"} (${forkCheck.reasons.join("; ") || "ok"})`);
+    console.log(
+      `[swarm] fork check: ${forkCheck.ok ? "PASS" : "FAIL"} (${forkCheck.reasons.join("; ") || "ok"})`,
+    );
     if (!forkCheck.ok) {
       return submitSyntheticFail(proposalId, `fork-check failed: ${forkCheck.reasons.join("; ")}`);
     }

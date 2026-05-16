@@ -1,22 +1,18 @@
-import type { Persona } from "./_types.js";
-import { originCheck } from "./originCheck.js";
-import { novelty } from "./novelty.js";
-import { techMonad } from "./techMonad.js";
-import { demoReady } from "./demoReady.js";
-
 /**
- * The four-persona swarm. ORDER IS LOAD-BEARING:
- *   PERSONAS[i] is voiced by the agent whose key is deriveAgentAccount(i)
- *   and whose ERC-8004 token ID is agentTokenIds[i] (post Phase 6).
+ * Public API for the agent panel.
  *
- * Don't reorder without re-minting/re-registering the on-chain agent set.
+ *   PANEL          — the 4 model brains (name + slug each)
+ *   callModel      — call one panel member with the shared 4-rubric prompt
+ *   PanelVerdict   — structured output shape (origin/novelty/tech/demo each {score, reasoning})
+ *   RUBRIC_KEYS    — ["origin","novelty","tech","demo"] in canonical order
+ *
+ * The previous `PERSONAS` array (one persona per rubric) is retired —
+ * Option B architecture: every member evaluates every rubric, cross-checked
+ * via per-rubric mean across members.
  */
-export const PERSONAS: readonly Persona[] = [
-  originCheck, // index 0 — anthropic/claude-haiku-4.5
-  novelty,     // index 1 — anthropic/claude-sonnet-4.5
-  techMonad,   // index 2 — openai/gpt-4.1
-  demoReady,   // index 3 — moonshotai/kimi-k2
-] as const;
-
-export type { Persona, PersonaVerdict } from "./_types.js";
+export { PANEL } from "./panel.js";
+export type { PanelMember } from "./panel.js";
 export { callModel } from "./_callModel.js";
+export type { PanelCallResult } from "./_callModel.js";
+export { RUBRIC_KEYS } from "./rubric.js";
+export type { PanelVerdict, RubricKey } from "./rubric.js";
