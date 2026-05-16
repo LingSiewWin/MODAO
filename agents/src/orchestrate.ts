@@ -53,6 +53,7 @@ export async function scoreProposal(ctx: ProposalContext): Promise<ScoredProposa
   );
 
   const phaseStart = performance.now();
+  const failures: { name: string; reason: string }[] = [];
   const memberResults = await Promise.all(
     PANEL.slice(0, config.activeAgentCount).map(async (member, i) => {
       try {
@@ -66,7 +67,9 @@ export async function scoreProposal(ctx: ProposalContext): Promise<ScoredProposa
         );
         return { member, index: i, verdict, durationMs };
       } catch (err) {
-        console.error(`  [${member.name}] FAILED: ${(err as Error).message.slice(0, 200)}`);
+        const reason = (err as Error).message.slice(0, 300);
+        console.error(`  [${member.name}] FAILED: ${reason}`);
+        failures.push({ name: member.name, reason });
         return null;
       }
     }),
@@ -79,21 +82,36 @@ export async function scoreProposal(ctx: ProposalContext): Promise<ScoredProposa
   );
 
   if (successful.length < ORACLE_THRESHOLD) {
+    // audit I3: recap failed members + first line of each reason so the user
+    // can tell retryable issues (429, JSON truncation) from real refusals.
     console.error(
       `[swarm] only ${successful.length}/${ORACLE_THRESHOLD} members succeeded — aborting`,
     );
+    for (const f of failures) {
+      const firstLine = f.reason.split("\n")[0]?.slice(0, 140) ?? "(no reason)";
+      console.error(`  └─ ${f.name}: ${firstLine}`);
+    }
     return null;
   }
 
   // Per-rubric mean. Failed members count as 0 across all rubrics
-  // (C3 fix: divide by activeAgentCount, not successful.length).
-  const perRubric: Record<RubricKey, number> = { origin: 0, novelty: 0, tech: 0, demo: 0 };
+  // (audit C3: divide by activeAgentCount, not successful.length).
+  // Aggregate computed from RAW 16 scores (audit C1: avoid rounding drift
+  // from per-rubric rounded-then-averaged). perRubric is rounded for display
+  // only — the on-chain score uses the raw mean.
+  const rawPerRubric: Record<RubricKey, number> = { origin: 0, novelty: 0, tech: 0, demo: 0 };
   for (const rubric of RUBRIC_KEYS) {
-    const sum = successful.reduce((acc, r) => acc + r.verdict[rubric].score, 0);
-    perRubric[rubric] = Math.round(sum / config.activeAgentCount);
+    rawPerRubric[rubric] =
+      successful.reduce((acc, r) => acc + r.verdict[rubric].score, 0) / config.activeAgentCount;
   }
+  const perRubric: Record<RubricKey, number> = {
+    origin: Math.round(rawPerRubric.origin),
+    novelty: Math.round(rawPerRubric.novelty),
+    tech: Math.round(rawPerRubric.tech),
+    demo: Math.round(rawPerRubric.demo),
+  };
   const aggregateScore = Math.round(
-    (perRubric.origin + perRubric.novelty + perRubric.tech + perRubric.demo) / 4,
+    (rawPerRubric.origin + rawPerRubric.novelty + rawPerRubric.tech + rawPerRubric.demo) / 4,
   );
 
   // Reasoning blob: per-member then per-rubric — gives a reviewer a 1D scroll
@@ -151,6 +169,17 @@ export async function scoreProposal(ctx: ProposalContext): Promise<ScoredProposa
     `[swarm] perRubric=${JSON.stringify(perRubric)} aggregate=${aggregateScore} wall=${totalDurationMs.toFixed(0)}ms`,
   );
 
+  // KNOWN LIMITATION (audit C2, deferred — needs contract change):
+  //   Each agent signs the AGGREGATE (proposalId, aggregateScore, rHash, deadline).
+  //   In Option B the aggregate is a mean across all 4 panel members; failed
+  //   members count as 0 (audit C3). So an agent attests to a number computed
+  //   in part from peers it didn't see succeed. Safety-equivalent for the
+  //   on-chain oracle (which only checks signer set ≥ threshold + minScore),
+  //   but for a future off-chain reputation system the attestation is
+  //   semantically dishonest. Proper fix: extend the Verdict struct on-chain
+  //   to include either a successful-member bitmap or each agent's own
+  //   per-rubric digest, then have the contract recompute the aggregate.
+  //   Blocked on a fresh AISwarmOracle deployment.
   const signed: AgentVerdict[] = await Promise.all(
     successful.map((r) =>
       signVerdict(deriveAgentAccount(r.index), ctx.proposalId, aggregateScore, rHash, deadline),

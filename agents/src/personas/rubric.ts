@@ -86,12 +86,15 @@ STRICT JSON only, no prose, no code fences. Exactly this shape:
   "demo":    {"score": <0..100 int>, "reasoning": "<150-500 words>"}
 }`;
 
+/**
+ * Strict reasoning bound. We do NOT silently truncate (audit I2): if a model
+ * dumps all its token budget into one rubric's reasoning, the schema rejects
+ * the whole verdict and that member counts as failed — better signal than
+ * truncating one rubric and zeroing the rest.
+ */
 const RubricCell = z.object({
   score: z.number().int().min(0).max(100),
-  reasoning: z
-    .string()
-    .min(1)
-    .transform((s) => (s.length > 4000 ? s.slice(0, 4000) + "…[truncated]" : s)),
+  reasoning: z.string().min(1).max(4000),
 });
 
 export const PanelVerdictSchema = z.object({
