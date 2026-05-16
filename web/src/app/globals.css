@@ -72,6 +72,7 @@
     BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
     Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-display: var(--font-lora), "Lora", Georgia, "Times New Roman", serif;
 }
 
 * { box-sizing: border-box; }
