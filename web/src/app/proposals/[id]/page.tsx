@@ -1,42 +1,84 @@
+"use client";
+
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { use } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StateBadge } from "@/components/ui/Badge";
 import { TwapBar } from "@/components/proposals/TwapBar";
 import { ProposalCountdown } from "@/components/proposals/ProposalCountdown";
 import { ConditionalMarketCard } from "@/components/markets/ConditionalMarketCard";
+import { useProposal } from "@/hooks/use-proposals";
 import { MOCK_PROPOSALS } from "@/lib/mock-data";
-import { truncateAddress, formatUsd } from "@/lib/utils";
+import { formatUsd, cn } from "@/lib/utils";
 
-export default async function ProposalDetailPage({
+export default function ProposalDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
-  const proposal = MOCK_PROPOSALS.find((p) => p.id === id);
-  if (!proposal) notFound();
+  const { id } = use(params);
+  const { proposal: onchain, isLoading } = useProposal(id);
+  // Fallback to mock if id matches a demo proposal — keeps the layout viewable
+  // before any real proposals exist on chain.
+  const fallback = MOCK_PROPOSALS.find((p) => p.id === id);
+  const proposal = onchain ?? fallback;
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="h-96 rounded-[var(--radius-lg)] border border-border bg-surface/40 animate-pulse" aria-busy />
+      </AppShell>
+    );
+  }
+
+  if (!proposal) {
+    return (
+      <AppShell>
+        <div className="rounded-[var(--radius-lg)] border border-dashed border-border bg-surface/30 px-6 py-16 text-center">
+          <h2 className="text-sm font-semibold text-fg">Proposal not found</h2>
+          <p className="mt-1 text-xs text-muted">
+            #{id} doesn't exist on chain (or hasn't been indexed yet).
+          </p>
+          <Link href="/proposals" className="mt-4 inline-flex text-xs text-brand-3 hover:text-brand font-medium">
+            ← Back to proposals
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   const passWinning = proposal.passTwap > proposal.failTwap;
+  const usingFallback = !onchain && !!fallback;
 
   return (
     <AppShell>
-      <div className="mb-6">
+      <div className="mb-6 flex items-center justify-between gap-3">
         <Link
           href="/proposals"
           className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-fg font-medium"
         >
           <span aria-hidden>←</span> Proposals
         </Link>
+        {usingFallback && (
+          <span className={cn("inline-flex items-center gap-1.5 text-[11px] font-medium",
+            "rounded-full px-2 py-0.5 border border-warning/30 bg-warning/5 text-warning")}>
+            <span className="size-1.5 rounded-full bg-warning" />
+            Demo data — not on chain
+          </span>
+        )}
       </div>
 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-8">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs font-mono text-faint">
             <span>Proposal #{proposal.number}</span>
-            <span aria-hidden>·</span>
-            <span>Slot {proposal.slotEnqueued.toLocaleString()}</span>
+            {proposal.slotEnqueued > 0 && (
+              <>
+                <span aria-hidden>·</span>
+                <span>Slot {proposal.slotEnqueued.toLocaleString()}</span>
+              </>
+            )}
           </div>
           <h1 className="mt-2 text-2xl sm:text-3xl font-semibold text-fg tracking-tight">
             {proposal.title}
@@ -71,17 +113,17 @@ export default async function ProposalDetailPage({
             <h2 className="text-xs font-semibold uppercase tracking-widest text-faint mb-3">
               Proposer
             </h2>
-            <p className="font-mono text-sm text-fg break-all">
-              {proposal.proposer}
-            </p>
-            <a
-              href={proposal.descriptionUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-3 inline-flex items-center gap-1.5 text-xs text-brand-3 hover:text-brand font-medium"
-            >
-              View full description <span aria-hidden>↗</span>
-            </a>
+            <p className="font-mono text-sm text-fg break-all">{proposal.proposer}</p>
+            {proposal.descriptionUrl && proposal.descriptionUrl !== "#" && (
+              <a
+                href={proposal.descriptionUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs text-brand-3 hover:text-brand font-medium"
+              >
+                View full description <span aria-hidden>↗</span>
+              </a>
+            )}
           </Card>
 
           <Card className="p-5">
