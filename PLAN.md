@@ -114,6 +114,60 @@ Core contracts: `MODAOGovernor`, `ConditionalVault`, `ConditionalToken`, `Propos
 
 ---
 
+## Hackathon MVP Scope
+
+The full plan below is the v1 product. For the hackathon we ship a tighter subset designed around a single demo arc — the rest moves to a post-hackathon roadmap.
+
+### Demo arc (everything serves this)
+
+1. User pastes a proposal in the UI.
+2. AI agents light up on screen and sign a verdict on-chain in ~1s — **the Monad moment.**
+3. Conditional `pass`/`fail` markets open. Judge trades PASS up; TWAP chart climbs live.
+4. 3h TWAP window (compressible via time-warp for the demo) — winner picked.
+5. `ProjectLaunched` event fires; audit trail (agent scores + reasoning + market history) visible.
+
+### Cuts from full plan
+
+| Cut | Replacement in MVP | Restored in |
+|---|---|---|
+| `LaunchFactory` (real ERC20 + AMM deploy) | Emit `ProjectLaunched(name, symbol, supply)` event only | Post-hackathon |
+| `Treasury` standalone contract | `mapping(uint256 => uint256) bonds` inside `MODAOGovernor` | Post-hackathon |
+| 5-of-9 agent threshold | 3-of-5 threshold | Post-hackathon |
+| Launch bond + treasury match | Single proposer bond, no match | Stretch if time |
+| Frontend deferred to Phase 7 | **Minimal Next.js demo in critical path** | — (promoted to MVP) |
+
+### MVP contract surface (5 total)
+
+`MODAOToken`, `MockUSDC`, `ConditionalVault`, `ProposalAMM` (+TWAP), `AISwarmOracle`, `MODAOGovernor`.
+
+### Resolved sizing (hackathon placeholders)
+
+- **Proposer bond:** 100 MODAO. AI-reject → slashed. Market-FAIL → refunded. Market-PASS → seeds project/USDC LP. (Treasury match = stretch goal.)
+- **AI verdict format:** each agent signs `(proposalId, score: 0–100, reasoningHash)`. Threshold of 3 signatures above a configured minimum score required to admit.
+- **TWAP window:** 3h, per-proposal configurable for demos.
+- **Conditional resolution:** winning side redeems quote 1:1; losing side bricked; LP positions in losing pool refund quote-side proportionally.
+
+### MVP task list (overrides Phases 1–6 below for hackathon scope)
+
+1. Foundry scaffold + Monad testnet config — S
+2. `MODAOToken` + `MockUSDC` — S
+3. `ConditionalVault` deposit + mint pass/fail — M
+4. `ConditionalVault` finalize + redeem (with losing-side quote refund) — M
+5. `AISwarmOracle` registry + EIP-712 verdict (3-of-5, score + reasoningHash) — M
+6. `ProposalAMM` constant-product pair + v2-style cumulative TWAP — M
+7. `MODAOGovernor` state machine + bond mapping + finalize/event-emit — M
+8. Off-chain TS agent worker (Claude API → score + reasoning → viem sign) — S
+9. **Minimal Next.js frontend:** submit form, agent verdict viewer, market trade UI, TWAP chart — M
+10. Monad testnet deploy + end-to-end demo run — S
+
+**Hackathon checkpoint:** judge can submit → see agents sign live → trade → watch TWAP resolve → see `ProjectLaunched`, all on Monad testnet, in under 5 minutes.
+
+---
+
+## Full v1 Plan (post-hackathon roadmap)
+
+Everything below is the original plan. It remains the target for v1; the hackathon cuts above are temporary.
+
 ## Task List
 
 ### Phase 1: Foundation
@@ -190,11 +244,16 @@ Open sub-questions for the launch mechanism:
 - Who provides initial liquidity — project posts a bond, or platform seeds from MODAO treasury?
 - Lock-up / vesting defaults?
 
-## Open Questions (need answers before Phase 5)
+## Resolved Decisions
 
-1. **Quote token for futarchy markets:** USDC on Monad, or mock stable for testnet?
-2. **AI swarm composition:** Single org (you) or federated from day 1?
-3. **Launch mechanism:** Bonding curve (pump.fun-style) vs. LBP vs. fixed-price IDO?
-4. **Initial liquidity source:** Project bond, MODAO treasury, or both?
-5. **Treasury contract:** Exists in v1 or deferred?
-6. **MODAO tokenomics:** Supply, distribution, initial mint allocation? Fee capture from each launch back to MODAO holders?
+1. **Quote token:** `MockUSDC` ERC20 for Foundry tests and Monad testnet deploy. Public `mint()` gated for test convenience. Swap to real Monad USDC at mainnet time — vault is parameterised on the quote token, so it's a deploy-script change only.
+2. **AI swarm composition:** Federated from day 1. Agent registry in `AISwarmOracle` accepts independently-operated signers; threshold (5-of-9) tolerates any single operator being offline or captured. No single-org bootstrap shortcut.
+3. **Launch mechanism:** MetaDAO-style seeded AMM pool. On PASS, `LaunchFactory` deploys the project ERC20 and opens an unconditional constant-product pair (`PROJECT / USDC`) seeded with project bond + MODAO treasury match. No bonding curve, no LBP, no IDO allocation list — futarchy already did the curation and price-discovery prelude. Reuses the same pair contract as `ProposalAMM`.
+4. **Initial liquidity:** Both. Project posts a bond (anti-spam + skin in the game) and MODAO treasury matches it to bootstrap depth. Mirrors MetaDAO's proposer-bond + DAO-funded-vault pattern.
+5. **Treasury contract:** Exists in v1. Holds bonds, treasury match, and launch fees. Minimal surface — `deposit`, `withdraw(onlyGovernor)`, `matchLaunch(proposalId, amount)`.
+6. **MODAO tokenomics (MetaDAO-mirrored):**
+   - Fixed supply, no inflation.
+   - MODAO is the **base token** in every conditional market (paired against USDC). Trading futarchy = holding MODAO = built-in demand on every new launch.
+   - Distribution: majority to contributors/early traders with vesting; remainder used to seed initial futarchy liquidity. No VC round — first allocations decided via futarchy itself.
+   - Fee capture: AMM swap fees + `LaunchFactory` fees flow to treasury → buy-and-burn or staker distribution (governed by futarchy).
+   - Specific %s and supply numbers deferred to Phase 7; mechanism shape is fixed now so contract interfaces don't change.
