@@ -13,9 +13,13 @@
     "@modao/shared": "workspace:*",
     "@rainbow-me/rainbowkit": "latest",
     "@tanstack/react-query": "latest",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.11.0",
+    "lucide-react": "^0.460.0",
     "next": "15.0.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
+    "tailwind-merge": "^2.5.0",
     "viem": "latest",
     "wagmi": "latest"
   },
