@@ -7,12 +7,13 @@
     "watch": "tsx watch src/worker.ts",
     "worker": "tsx src/worker.ts",
     "once": "tsx src/runOnce.ts",
+    "dry": "tsx src/runDryEval.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "latest",
     "@modao/shared": "workspace:*",
     "dotenv": "latest",
+    "openai": "latest",
     "viem": "latest",
     "zod": "latest"
   },
