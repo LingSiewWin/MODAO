@@ -18,8 +18,9 @@ contract DeployScript is Script {
     uint256 constant ORACLE_MIN_SCORE = 60;
 
     function run() external {
-        uint256 deployerPk = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPk);
+        // When invoked via `forge script --account <keystore>`, foundry sets msg.sender
+        // and tx.origin to the keystore address and handles signing externally.
+        address deployer = msg.sender;
 
         // Derive 5 deterministic agent addresses. Sort ascending to match the oracle's dedup rule
         // expectations downstream (agents will sign in this order off-chain).
@@ -37,7 +38,7 @@ contract DeployScript is Script {
             }
         }
 
-        vm.startBroadcast(deployerPk);
+        vm.startBroadcast();
 
         MODAOToken modao = new MODAOToken(deployer);
         MockUSDC usdc = new MockUSDC();

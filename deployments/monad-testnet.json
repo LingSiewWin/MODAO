@@ -1,0 +1,51 @@
+{
+  "network": "monad-testnet",
+  "chainId": 10143,
+  "rpcUrl": "https://testnet-rpc.monad.xyz",
+  "explorer": "https://testnet.monadscan.com",
+  "deployedAt": {
+    "firstBlock": 32071797,
+    "lastBlock": 32071827
+  },
+  "deployer": "0x37960C65118a5263fb880f105663Fd4f29aA15de",
+  "contracts": {
+    "MODAOToken": "0xb2De502B643Fe5cC7781Fc8B18493a414DEe8AFB",
+    "MockUSDC": "0xF1c0657Bb651D14a64a42Daa1381A4615D5e72F5",
+    "AISwarmOracle": "0xAF15A88b7d0CC75bb254662A1abf4d01491FE536",
+    "MODAOGovernor": "0x7992f1590bE36DCc78079DE75ec796c904461342"
+  },
+  "constants": {
+    "BOND_MODAO": "100000000000000000000",
+    "BOND_USDC": "100000000",
+    "TWAP_WINDOW_SECONDS": 10800,
+    "ORACLE_THRESHOLD": 3,
+    "ORACLE_MIN_SCORE": 60
+  },
+  "agents": {
+    "seed": "keccak256(abi.encode(\"modao-agent\", i)) for i in 0..4",
+    "addresses": [
+      "0x0e104C3648a7277F9e66CB259f942bD1FC405B0B",
+      "0x1a1F8527E5D9adE42bf8F0000b27E96F7f8E3734",
+      "0x74B3623C9c4BcF0ffaB4bB6e2757D9857Eb31bf1",
+      "0x897CAc910D11b754BaBE69DA81b1D8892e6542C9",
+      "0xddF29ea5B479604cd7ba6F1Bca6A17ac7F49a33F"
+    ],
+    "note": "Addresses are sorted ascending — the oracle requires signatures in strictly-ascending signer order for dedup. The off-chain worker derives the matching private keys from the same seed."
+  },
+  "eip712": {
+    "domain": {
+      "name": "MODAOAISwarmOracle",
+      "version": "1",
+      "chainId": 10143,
+      "verifyingContract": "0xAF15A88b7d0CC75bb254662A1abf4d01491FE536"
+    },
+    "verdictType": {
+      "Verdict": [
+        { "name": "proposalId", "type": "uint256" },
+        { "name": "score", "type": "uint256" },
+        { "name": "reasoningHash", "type": "bytes32" },
+        { "name": "deadline", "type": "uint256" }
+      ]
+    }
+  }
+}
