@@ -149,13 +149,17 @@ export default function ProposalDetailPage({
             twap={markets.isOpen ? markets.pass.twap : proposal.passTwap}
             winning={passWinning}
             live={
-              markets.isOpen
+              markets.isOpen && markets.pass.amm && markets.fail.amm
                 ? {
                     reserve0: markets.pass.reserve0,
                     reserve1: markets.pass.reserve1,
                     spot: markets.pass.spot,
                     asks: markets.pass.asks,
                     bids: markets.pass.bids,
+                    passAmm: markets.pass.amm,
+                    failAmm: markets.fail.amm,
+                    usdcVault: markets.usdcVault,
+                    modaoVault: markets.modaoVault,
                   }
                 : undefined
             }
@@ -165,13 +169,17 @@ export default function ProposalDetailPage({
             twap={markets.isOpen ? markets.fail.twap : proposal.failTwap}
             winning={!passWinning}
             live={
-              markets.isOpen
+              markets.isOpen && markets.pass.amm && markets.fail.amm
                 ? {
                     reserve0: markets.fail.reserve0,
                     reserve1: markets.fail.reserve1,
                     spot: markets.fail.spot,
                     asks: markets.fail.asks,
                     bids: markets.fail.bids,
+                    passAmm: markets.pass.amm,
+                    failAmm: markets.fail.amm,
+                    usdcVault: markets.usdcVault,
+                    modaoVault: markets.modaoVault,
                   }
                 : undefined
             }

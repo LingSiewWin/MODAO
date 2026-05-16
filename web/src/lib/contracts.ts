@@ -263,6 +263,31 @@ export const mockUsdcAbi = [
 ] as const;
 
 // ----------------------------------------------------------------------------
+// ConditionalVault — wraps an underlying ERC20 into pass/fail conditional tokens
+// ----------------------------------------------------------------------------
+
+export const conditionalVaultAbi = [
+  { type: "function", name: "passToken", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "failToken", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  { type: "function", name: "outcome", inputs: [], outputs: [{ type: "uint8" }], stateMutability: "view" },
+  { type: "function", name: "underlying", inputs: [], outputs: [{ type: "address" }], stateMutability: "view" },
+  {
+    type: "function",
+    name: "deposit",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "redeem",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+] as const;
+
+// ----------------------------------------------------------------------------
 // On-chain proposal status — mirrors MODAOGovernor.Status enum.
 // ----------------------------------------------------------------------------
 

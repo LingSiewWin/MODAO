@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { parseUnits } from "viem";
+import { parseUnits, formatUnits, type Address } from "viem";
+import { useAccount } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { TwapDisplay } from "./TwapDisplay";
@@ -10,6 +12,7 @@ import { OrderBook } from "./OrderBook";
 import { cn, formatNumber } from "@/lib/utils";
 import { quoteTrade, type LadderRow } from "@/lib/amm-math";
 import { MODAO_DECIMALS, USDC_DECIMALS } from "@/lib/contracts";
+import { useTradeProposal, type TradeStep } from "@/hooks/use-trade-proposal";
 import type { Order } from "@/lib/types";
 
 /**
@@ -49,6 +52,12 @@ export interface ConditionalMarketCardProps {
     spot: number;
     asks: LadderRow[];
     bids: LadderRow[];
+    // Vault + AMM addresses for the trade flow. Both AMMs are passed in so
+    // the hook can route to the right side.
+    passAmm: Address;
+    failAmm: Address;
+    usdcVault: Address;
+    modaoVault: Address;
   };
 }
 
@@ -62,6 +71,23 @@ export function ConditionalMarketCard({
 }: ConditionalMarketCardProps) {
   const [orderSide, setOrderSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
+  const { isConnected } = useAccount();
+
+  const {
+    trade,
+    reset,
+    step,
+    error,
+    lastTx,
+    isWorking,
+    balances,
+  } = useTradeProposal({
+    passAmm: live?.passAmm,
+    failAmm: live?.failAmm,
+    usdcVault: live?.usdcVault,
+    modaoVault: live?.modaoVault,
+    side,
+  });
 
   // Real quote against live reserves when amount + direction are set.
   const quote = useMemo(() => {
@@ -82,6 +108,11 @@ export function ConditionalMarketCard({
 
   const tone = side === "pass" ? "success" : "danger";
   const label = side === "pass" ? "Pass market" : "Fail market";
+
+  const onTrade = async () => {
+    if (!amount) return;
+    await trade({ direction: orderSide, amount });
+  };
 
   return (
     <Card
@@ -191,12 +222,128 @@ export function ConditionalMarketCard({
             </div>
           )}
 
-          <Button variant={orderSide === "buy" ? "success" : "danger"} className="w-full" disabled>
-            {live ? "Trade router · coming soon" : "Markets not open yet"}
-          </Button>
+          {/* Balances when wallet connected + live */}
+          {live && isConnected && (
+            <div className="flex items-center justify-between text-[11px] font-mono tabular text-faint">
+              <span>Balance</span>
+              <span>
+                {orderSide === "buy"
+                  ? `${formatNumber(Number(formatUnits(balances.usdc, USDC_DECIMALS)), 2)} ${quoteSymbol}`
+                  : `${formatNumber(Number(formatUnits(balances.conditionalModao, MODAO_DECIMALS)), 4)} ${baseSymbol}-${side.toUpperCase()}`}
+              </span>
+            </div>
+          )}
+
+          {/* Trade button — real flow when live + connected, otherwise gated */}
+          {!live ? (
+            <Button
+              variant={orderSide === "buy" ? "success" : "danger"}
+              className="w-full"
+              disabled
+            >
+              Markets not open yet
+            </Button>
+          ) : !isConnected ? (
+            <ConnectButton.Custom>
+              {({ openConnectModal }) => (
+                <Button variant="gradient" className="w-full" onClick={openConnectModal}>
+                  Connect wallet to trade
+                </Button>
+              )}
+            </ConnectButton.Custom>
+          ) : (
+            <Button
+              variant={orderSide === "buy" ? "success" : "danger"}
+              className="w-full"
+              onClick={onTrade}
+              disabled={isWorking || !amount}
+            >
+              {tradeLabel(step, orderSide, side)}
+            </Button>
+          )}
+
+          {/* Per-step progress banner */}
+          {live && isConnected && (step !== "idle") && (
+            <TradeStatus step={step} error={error} lastTx={lastTx} onReset={reset} />
+          )}
+
+          {/* Buyer-side leftover warning — futarchy UX truth */}
+          {live && isConnected && orderSide === "buy" && step === "idle" && amount && (
+            <p className="text-[10px] text-faint leading-relaxed">
+              You'll receive {baseSymbol}-{side.toUpperCase()} and keep an equal amount
+              of {quoteSymbol}-{side === "pass" ? "FAIL" : "PASS"} from the deposit. Sell
+              it on the other market or hold until the proposal finalizes.
+            </p>
+          )}
         </div>
       </div>
     </Card>
+  );
+}
+
+function tradeLabel(step: TradeStep, dir: "buy" | "sell", side: "pass" | "fail"): string {
+  if (step === "success") return "Done ✓";
+  if (step === "minting-usdc") return "Minting USDC…";
+  if (step === "approving-input") return dir === "buy" ? "Approving USDC…" : "Approving token…";
+  if (step === "depositing-collateral") return "Splitting into PASS+FAIL…";
+  if (step === "approving-conditional") return "Approving conditional…";
+  if (step === "swapping") return "Swapping…";
+  return dir === "buy" ? `Buy ${side === "pass" ? "PASS" : "FAIL"}` : `Sell ${side === "pass" ? "PASS" : "FAIL"}`;
+}
+
+function TradeStatus({
+  step,
+  error,
+  lastTx,
+  onReset,
+}: {
+  step: TradeStep;
+  error: Error | null;
+  lastTx: `0x${string}` | null;
+  onReset: () => void;
+}) {
+  if (step === "success") {
+    return (
+      <div className="rounded-[var(--radius-md)] border border-success/30 bg-success/5 px-3 py-2 text-[11px] text-success flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5">
+          <span className="size-1.5 rounded-full bg-success" />
+          Trade landed
+          {lastTx && (
+            <a
+              href={`https://testnet.monadexplorer.com/tx/${lastTx}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono underline-offset-2 hover:underline ml-1"
+            >
+              {lastTx.slice(0, 8)}…
+            </a>
+          )}
+        </span>
+        <button onClick={onReset} className="text-muted hover:text-fg">
+          Trade again
+        </button>
+      </div>
+    );
+  }
+  if (step === "error") {
+    return (
+      <div className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/5 px-3 py-2 text-[11px] text-danger break-words">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <span className="font-medium">Trade failed</span>
+          <button onClick={onReset} className="text-muted hover:text-fg">
+            Reset
+          </button>
+        </div>
+        {error?.message?.slice(0, 200) ?? "Unknown error"}
+      </div>
+    );
+  }
+  // Working state
+  return (
+    <div className="rounded-[var(--radius-md)] border border-brand/30 bg-brand/5 px-3 py-2 text-[11px] text-brand-3 flex items-center gap-2">
+      <span className="size-1.5 rounded-full bg-brand-3 animate-pulse" />
+      Step in progress — confirm in wallet
+    </div>
   );
 }
 

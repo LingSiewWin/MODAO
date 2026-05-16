@@ -26,6 +26,10 @@ export interface ProposalMarkets {
   isOpen: boolean; // markets opened on-chain?
   pass: MarketSnapshot;
   fail: MarketSnapshot;
+  // Vault addresses are needed by the trade flow to wrap real tokens into
+  // conditional tokens before swapping. Both are zero address pre-open.
+  usdcVault: `0x${string}`;
+  modaoVault: `0x${string}`;
 }
 
 const EMPTY_SNAPSHOT: MarketSnapshot = {
@@ -38,11 +42,15 @@ const EMPTY_SNAPSHOT: MarketSnapshot = {
   bids: [],
 };
 
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as const;
+
 const EMPTY_RESULT: ProposalMarkets = {
   isLoading: false,
   isOpen: false,
   pass: EMPTY_SNAPSHOT,
   fail: EMPTY_SNAPSHOT,
+  usdcVault: ZERO_ADDR,
+  modaoVault: ZERO_ADDR,
 };
 
 /**
@@ -118,6 +126,8 @@ export function useProposalMarkets(proposalIdRaw: string | bigint | undefined): 
         isOpen: true,
         pass: { ...EMPTY_SNAPSHOT, amm: proposal.passAmm },
         fail: { ...EMPTY_SNAPSHOT, amm: proposal.failAmm },
+        usdcVault: proposal.usdcVault,
+        modaoVault: proposal.modaoVault,
       };
     }
 
@@ -152,6 +162,8 @@ export function useProposalMarkets(proposalIdRaw: string | bigint | undefined): 
         asks: failLadder.asks,
         bids: failLadder.bids,
       },
+      usdcVault: proposal.usdcVault,
+      modaoVault: proposal.modaoVault,
     };
   }, [enabled, proposal, isOpen, ammReads, loadingProposal, loadingAmms]);
 }
