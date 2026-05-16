@@ -82,6 +82,7 @@ function shapeProposal(id: bigint, raw: OnchainProposal): Proposal {
     id: `prop_${String(id).padStart(3, "0")}`,
     number: Number(id),
     title: raw.spec.name ? `Launch ${raw.spec.name} on MoDAO` : `Proposal #${id}`,
+    symbol: raw.spec.symbol || "PROJECT",
     description: raw.spec.descriptionURI || "—",
     descriptionUrl: raw.spec.descriptionURI || "#",
     proposer: raw.proposer,

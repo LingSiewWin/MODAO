@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { use } from "react";
+import { useReadContract } from "wagmi";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StateBadge } from "@/components/ui/Badge";
@@ -9,10 +10,13 @@ import { TwapBar } from "@/components/proposals/TwapBar";
 import { ProposalCountdown } from "@/components/proposals/ProposalCountdown";
 import { ConditionalMarketCard } from "@/components/markets/ConditionalMarketCard";
 import { PositionPanel } from "@/components/proposals/PositionPanel";
+import { FinalizePanel } from "@/components/proposals/FinalizePanel";
 import { useProposal } from "@/hooks/use-proposals";
 import { useProposalMarkets } from "@/hooks/use-proposal-markets";
 import { MOCK_PROPOSALS } from "@/lib/mock-data";
 import { formatUsd, cn } from "@/lib/utils";
+import { erc20Abi } from "@/lib/contracts";
+import { zeroAddress } from "viem";
 
 export default function ProposalDetailPage({
   params,
@@ -26,6 +30,21 @@ export default function ProposalDetailPage({
   // before any real proposals exist on chain.
   const fallback = MOCK_PROPOSALS.find((p) => p.id === id);
   const proposal = onchain ?? fallback;
+
+  // Read the project's ERC20 symbol once markets are open. Falls back to the
+  // proposal's spec symbol if the on-chain read isn't ready yet.
+  const projectTokenAddr =
+    markets.isOpen && markets.projectToken !== zeroAddress
+      ? markets.projectToken
+      : undefined;
+  const { data: symbolFromChain } = useReadContract({
+    address: projectTokenAddr,
+    abi: erc20Abi,
+    functionName: "symbol",
+    query: { enabled: !!projectTokenAddr },
+  });
+  const projectSymbol =
+    (symbolFromChain as string | undefined) ?? proposal?.symbol ?? "PROJECT";
 
   if (isLoading) {
     return (
@@ -129,10 +148,20 @@ export default function ProposalDetailPage({
             )}
           </Card>
 
-          {markets.isOpen && markets.usdcVault !== "0x0000000000000000000000000000000000000000" && (
+          {markets.isOpen && markets.usdcVault !== zeroAddress && (
             <PositionPanel
               usdcVault={markets.usdcVault}
               projectVault={markets.projectVault}
+              projectToken={markets.projectToken}
+              projectSymbol={projectSymbol}
+            />
+          )}
+
+          {markets.status === 2 && (
+            <FinalizePanel
+              proposalId={BigInt(String(id).replace(/^prop_0*/, "") || "0")}
+              marketStartedAt={markets.marketStartedAt}
+              status={markets.status}
             />
           )}
 

@@ -4,6 +4,8 @@ export interface Proposal {
   id: string;
   number: number;
   title: string;
+  /** Project token symbol from the proposal spec (e.g. "ACME"). */
+  symbol: string;
   description: string;
   descriptionUrl: string;
   proposer: string;

@@ -30,9 +30,15 @@ import { MODAO_DECIMALS, USDC_DECIMALS } from "@/lib/contracts";
 export function PositionPanel({
   usdcVault,
   projectVault,
+  projectToken,
+  projectSymbol,
 }: {
   usdcVault: Address;
   projectVault: Address;
+  /** Per-proposal ProjectToken address; required for project-side deposits. */
+  projectToken: Address;
+  /** Project's ERC20 symbol (e.g. "ACME") — used for UI labels. */
+  projectSymbol: string;
 }) {
   const { isConnected } = useAccount();
   const [action, setAction] = useState<VaultAction>("deposit");
@@ -49,7 +55,7 @@ export function PositionPanel({
     isWorking,
     balances,
     outcomes,
-  } = useVaultActions({ usdcVault, projectVault });
+  } = useVaultActions({ usdcVault, projectVault, projectToken });
 
   const decimals = side === "usdc" ? USDC_DECIMALS : MODAO_DECIMALS;
   const isFinalized =
@@ -113,11 +119,11 @@ export function PositionPanel({
         <>
           <div className="grid grid-cols-2 gap-3 text-xs font-mono tabular">
             <Balance label="USDC" amount={balances.usdc} decimals={USDC_DECIMALS} tone="muted" />
-            <Balance label="MODAO" amount={balances.modao} decimals={MODAO_DECIMALS} tone="muted" />
+            <Balance label={projectSymbol} amount={balances.modao} decimals={MODAO_DECIMALS} tone="muted" />
             <Balance label="PASS-USDC" amount={balances.passUsdc} decimals={USDC_DECIMALS} tone="success" />
-            <Balance label="PASS-MODAO" amount={balances.passModao} decimals={MODAO_DECIMALS} tone="success" />
+            <Balance label={`PASS-${projectSymbol}`} amount={balances.passModao} decimals={MODAO_DECIMALS} tone="success" />
             <Balance label="FAIL-USDC" amount={balances.failUsdc} decimals={USDC_DECIMALS} tone="danger" />
-            <Balance label="FAIL-MODAO" amount={balances.failModao} decimals={MODAO_DECIMALS} tone="danger" />
+            <Balance label={`FAIL-${projectSymbol}`} amount={balances.failModao} decimals={MODAO_DECIMALS} tone="danger" />
           </div>
 
           <div className="mt-5 pt-4 border-t border-border space-y-3">
@@ -151,7 +157,7 @@ export function PositionPanel({
                       : "text-muted hover:text-fg",
                   )}
                 >
-                  {s}
+                  {s === "usdc" ? "USDC" : projectSymbol}
                 </button>
               ))}
             </div>
@@ -159,7 +165,7 @@ export function PositionPanel({
             <label className="block">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[11px] font-medium text-muted capitalize">
-                  Amount ({side.toUpperCase()})
+                  Amount ({side === "usdc" ? "USDC" : projectSymbol})
                 </span>
                 <button
                   onClick={setMax}
@@ -179,7 +185,7 @@ export function PositionPanel({
               </div>
             </label>
 
-            <p className="text-[10px] text-faint leading-relaxed">{actionHint(action, side)}</p>
+            <p className="text-[10px] text-faint leading-relaxed">{actionHint(action, side, projectSymbol)}</p>
 
             <Button
               variant={action === "redeem" ? "success" : "primary"}
@@ -242,8 +248,8 @@ function Balance({
   );
 }
 
-function actionHint(action: VaultAction, side: VaultSide): string {
-  const sym = side.toUpperCase();
+function actionHint(action: VaultAction, side: VaultSide, projectSymbol: string): string {
+  const sym = side === "usdc" ? "USDC" : projectSymbol;
   if (action === "deposit") {
     return `Lock ${sym} in the vault. Receive an equal amount of PASS-${sym} and FAIL-${sym}.`;
   }
@@ -281,7 +287,7 @@ function StatusBanner({
       <div className="rounded-[var(--radius-md)] border border-success/30 bg-success/5 px-3 py-2 text-[11px] text-success flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5">
           <span className="size-1.5 rounded-full bg-success" />
-          {lastAction ? `${lastAction[0].toUpperCase()}${lastAction.slice(1)} confirmed` : "Done"}
+          {lastAction ? `${lastAction.charAt(0).toUpperCase()}${lastAction.slice(1)} confirmed` : "Done"}
           {lastTx && (
             <a
               href={`https://testnet.monadexplorer.com/tx/${lastTx}`}

@@ -49,9 +49,12 @@ export type VaultAction = "deposit" | "merge" | "redeem";
 export function useVaultActions({
   usdcVault,
   projectVault,
+  projectToken,
 }: {
   usdcVault?: Address;
   projectVault?: Address;
+  /** Per-proposal ProjectToken address — required for project-side deposits. */
+  projectToken?: Address;
 }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
@@ -85,17 +88,20 @@ export function useVaultActions({
   const conditionalFailModao = tokenReads?.[4]?.result as Address | undefined;
   const modaoOutcome = Number(tokenReads?.[5]?.result ?? 0);
 
-  // Balances — real + all four conditional flavors.
+  // Balances — real underlying tokens + all four conditional flavors.
+  // The "project" side underlying is the per-proposal ProjectToken when set,
+  // otherwise we fall back to MODAOToken (lets the panel render before open).
+  const projectUnderlying = projectToken ?? CONTRACTS.modaoToken;
   const balanceContracts =
     address && enabled
-      ? ([
-          { address: CONTRACTS.modaoToken, abi: erc20Abi, functionName: "balanceOf", args: [address] as const },
-          { address: CONTRACTS.mockUsdc, abi: erc20Abi, functionName: "balanceOf", args: [address] as const },
-          conditionalPassUsdc && { address: conditionalPassUsdc, abi: erc20Abi, functionName: "balanceOf", args: [address] as const },
-          conditionalFailUsdc && { address: conditionalFailUsdc, abi: erc20Abi, functionName: "balanceOf", args: [address] as const },
-          conditionalPassModao && { address: conditionalPassModao, abi: erc20Abi, functionName: "balanceOf", args: [address] as const },
-          conditionalFailModao && { address: conditionalFailModao, abi: erc20Abi, functionName: "balanceOf", args: [address] as const },
-        ].filter(Boolean) as Parameters<typeof useReadContracts>[0]["contracts"])
+      ? [
+          { address: projectUnderlying, abi: erc20Abi, functionName: "balanceOf" as const, args: [address] as const },
+          { address: CONTRACTS.mockUsdc, abi: erc20Abi, functionName: "balanceOf" as const, args: [address] as const },
+          conditionalPassUsdc && { address: conditionalPassUsdc, abi: erc20Abi, functionName: "balanceOf" as const, args: [address] as const },
+          conditionalFailUsdc && { address: conditionalFailUsdc, abi: erc20Abi, functionName: "balanceOf" as const, args: [address] as const },
+          conditionalPassModao && { address: conditionalPassModao, abi: erc20Abi, functionName: "balanceOf" as const, args: [address] as const },
+          conditionalFailModao && { address: conditionalFailModao, abi: erc20Abi, functionName: "balanceOf" as const, args: [address] as const },
+        ].filter((c): c is NonNullable<typeof c> => Boolean(c))
       : [];
 
   const { data: balanceReads, refetch: refetchBalances } = useReadContracts({
@@ -160,7 +166,16 @@ export function useVaultActions({
           }
 
           // 1. approve underlying -> vault
-          const underlying = vaultSide === "usdc" ? CONTRACTS.mockUsdc : CONTRACTS.modaoToken;
+          //    For the project side, the underlying is the per-proposal
+          //    ProjectToken — not MODAO. Without it we'd approve the wrong
+          //    token and the vault.deposit would revert with InsufficientAllowance.
+          if (vaultSide === "modao" && !projectToken) {
+            setError(new Error("ProjectToken address not loaded yet."));
+            setStep("error");
+            return;
+          }
+          const underlying =
+            vaultSide === "usdc" ? CONTRACTS.mockUsdc : (projectToken as Address);
           setStep("approving");
           await sendAndWait(publicClient, () =>
             writeContractAsync({
@@ -220,6 +235,7 @@ export function useVaultActions({
       publicClient,
       usdcVault,
       projectVault,
+      projectToken,
       balances.usdc,
       writeContractAsync,
       refetchBalances,

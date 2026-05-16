@@ -30,6 +30,14 @@ export interface ProposalMarkets {
   // conditional tokens before swapping. Both are zero address pre-open.
   usdcVault: `0x${string}`;
   projectVault: `0x${string}`;
+  /** ERC20 deployed by the governor at market-open. Zero address pre-open. */
+  projectToken: `0x${string}`;
+  /** Markets opened at this unix second; needed for the finalize gate. */
+  marketStartedAt: bigint;
+  /** Resolved outcome — 0 Pending, 1 Pass, 2 Fail. */
+  outcome: number;
+  /** Governor lifecycle status — 0 None, 1 Submitted, 2 MarketsOpen, 3 Finalized. */
+  status: number;
 }
 
 const EMPTY_SNAPSHOT: MarketSnapshot = {
@@ -51,6 +59,10 @@ const EMPTY_RESULT: ProposalMarkets = {
   fail: EMPTY_SNAPSHOT,
   usdcVault: ZERO_ADDR,
   projectVault: ZERO_ADDR,
+  projectToken: ZERO_ADDR,
+  marketStartedAt: 0n,
+  outcome: 0,
+  status: 0,
 };
 
 /**
@@ -117,8 +129,16 @@ export function useProposalMarkets(proposalIdRaw: string | bigint | undefined): 
 
   return useMemo<ProposalMarkets>(() => {
     if (!enabled) return EMPTY_RESULT;
-    if (!proposal || !isOpen) {
+    if (!proposal) {
       return { ...EMPTY_RESULT, isLoading: loadingProposal };
+    }
+    if (!isOpen) {
+      return {
+        ...EMPTY_RESULT,
+        isLoading: loadingProposal,
+        status: proposal.status,
+        outcome: proposal.outcome,
+      };
     }
     if (!ammReads || ammReads.length < 6) {
       return {
@@ -128,6 +148,10 @@ export function useProposalMarkets(proposalIdRaw: string | bigint | undefined): 
         fail: { ...EMPTY_SNAPSHOT, amm: proposal.failAmm },
         usdcVault: proposal.usdcVault,
         projectVault: proposal.projectVault,
+        projectToken: proposal.projectToken,
+        marketStartedAt: proposal.marketStartedAt,
+        outcome: proposal.outcome,
+        status: proposal.status,
       };
     }
 
@@ -164,6 +188,10 @@ export function useProposalMarkets(proposalIdRaw: string | bigint | undefined): 
       },
       usdcVault: proposal.usdcVault,
       projectVault: proposal.projectVault,
+      projectToken: proposal.projectToken,
+      marketStartedAt: proposal.marketStartedAt,
+      outcome: proposal.outcome,
+      status: proposal.status,
     };
   }, [enabled, proposal, isOpen, ammReads, loadingProposal, loadingAmms]);
 }
