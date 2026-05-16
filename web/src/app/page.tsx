@@ -1,7 +1,27 @@
+import { Navbar } from "@/components/layout/Navbar";
+import { Footer } from "@/components/layout/Footer";
+import { HeroSection } from "@/components/landing/HeroSection";
+import { StatsSection } from "@/components/landing/StatsSection";
+import { FeaturesSection } from "@/components/landing/FeaturesSection";
+import { FutarchySection } from "@/components/landing/FutarchySection";
+import { MarketOversightSection } from "@/components/landing/MarketOversightSection";
+import { ProposalsPreview } from "@/components/landing/ProposalsPreview";
+import { CtaSection } from "@/components/landing/CtaSection";
+
 export default function Home() {
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <h1 className="text-4xl font-bold tracking-tight">MODAO</h1>
-    </main>
+    <>
+      <Navbar />
+      <main>
+        <HeroSection />
+        <StatsSection />
+        <FeaturesSection />
+        <FutarchySection />
+        <MarketOversightSection />
+        <ProposalsPreview />
+        <CtaSection />
+      </main>
+      <Footer />
+    </>
   );
 }
