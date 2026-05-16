@@ -43,7 +43,7 @@ export function useProposals() {
     return data
       .map((r, i) => {
         if (r.status !== "success" || !r.result) return null;
-        return shapeProposal(ids[i], r.result as unknown as OnchainProposal);
+        return shapeProposal(ids[i]!, r.result as unknown as OnchainProposal);
       })
       .filter((p): p is Proposal => p !== null);
   }, [data, ids]);

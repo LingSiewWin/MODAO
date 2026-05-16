@@ -139,13 +139,13 @@ export default function CreatePage() {
             <Button
               variant="ghost"
               disabled={stepIdx === 0}
-              onClick={() => setStep(STEPS[Math.max(0, stepIdx - 1)].key)}
+              onClick={() => setStep(STEPS[Math.max(0, stepIdx - 1)]!.key)}
             >
               Back
             </Button>
 
             {stepIdx < STEPS.length - 1 ? (
-              <Button onClick={() => setStep(STEPS[stepIdx + 1].key)} variant="primary">
+              <Button onClick={() => setStep(STEPS[stepIdx + 1]!.key)} variant="primary">
                 Continue
               </Button>
             ) : !isConnected ? (

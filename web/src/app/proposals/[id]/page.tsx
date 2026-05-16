@@ -8,6 +8,7 @@ import { StateBadge } from "@/components/ui/Badge";
 import { TwapBar } from "@/components/proposals/TwapBar";
 import { ProposalCountdown } from "@/components/proposals/ProposalCountdown";
 import { ConditionalMarketCard } from "@/components/markets/ConditionalMarketCard";
+import { PositionPanel } from "@/components/proposals/PositionPanel";
 import { useProposal } from "@/hooks/use-proposals";
 import { useProposalMarkets } from "@/hooks/use-proposal-markets";
 import { MOCK_PROPOSALS } from "@/lib/mock-data";
@@ -127,6 +128,13 @@ export default function ProposalDetailPage({
               </a>
             )}
           </Card>
+
+          {markets.isOpen && markets.usdcVault !== "0x0000000000000000000000000000000000000000" && (
+            <PositionPanel
+              usdcVault={markets.usdcVault}
+              modaoVault={markets.modaoVault}
+            />
+          )}
 
           <Card className="p-5">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-faint mb-3">
