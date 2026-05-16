@@ -57,7 +57,7 @@ export interface ConditionalMarketCardProps {
     passAmm: Address;
     failAmm: Address;
     usdcVault: Address;
-    modaoVault: Address;
+    projectVault: Address;
   };
 }
 
@@ -85,7 +85,7 @@ export function ConditionalMarketCard({
     passAmm: live?.passAmm,
     failAmm: live?.failAmm,
     usdcVault: live?.usdcVault,
-    modaoVault: live?.modaoVault,
+    projectVault: live?.projectVault,
     side,
   });
 

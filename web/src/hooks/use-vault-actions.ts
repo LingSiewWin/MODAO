@@ -28,7 +28,7 @@ import {
  *   redeem(usdc, X)  — usdcVault.redeem(X). Post-finalize only. Burns X of the
  *                       winning side, returns X real USDC.
  *
- *   Same three actions exist for `modao` against modaoVault.
+ *   Same three actions exist for `modao` against projectVault.
  *
  * MockUSDC auto-mints if balance < amount on deposit — testnet convenience.
  */
@@ -48,10 +48,10 @@ export type VaultAction = "deposit" | "merge" | "redeem";
 
 export function useVaultActions({
   usdcVault,
-  modaoVault,
+  projectVault,
 }: {
   usdcVault?: Address;
-  modaoVault?: Address;
+  projectVault?: Address;
 }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
@@ -63,16 +63,16 @@ export function useVaultActions({
   const [lastAction, setLastAction] = useState<VaultAction | null>(null);
 
   // Resolve conditional-token addresses for both vaults in one batch.
-  const enabled = !!usdcVault && !!modaoVault;
+  const enabled = !!usdcVault && !!projectVault;
   const { data: tokenReads } = useReadContracts({
     contracts: enabled
       ? [
           { address: usdcVault!, abi: conditionalVaultAbi, functionName: "passToken" },
           { address: usdcVault!, abi: conditionalVaultAbi, functionName: "failToken" },
           { address: usdcVault!, abi: conditionalVaultAbi, functionName: "outcome" },
-          { address: modaoVault!, abi: conditionalVaultAbi, functionName: "passToken" },
-          { address: modaoVault!, abi: conditionalVaultAbi, functionName: "failToken" },
-          { address: modaoVault!, abi: conditionalVaultAbi, functionName: "outcome" },
+          { address: projectVault!, abi: conditionalVaultAbi, functionName: "passToken" },
+          { address: projectVault!, abi: conditionalVaultAbi, functionName: "failToken" },
+          { address: projectVault!, abi: conditionalVaultAbi, functionName: "outcome" },
         ]
       : [],
     query: { enabled },
@@ -126,7 +126,7 @@ export function useVaultActions({
         setStep("error");
         return;
       }
-      const vault = vaultSide === "usdc" ? usdcVault : modaoVault;
+      const vault = vaultSide === "usdc" ? usdcVault : projectVault;
       if (!vault) {
         setError(new Error("Markets not open yet."));
         setStep("error");
@@ -219,7 +219,7 @@ export function useVaultActions({
       address,
       publicClient,
       usdcVault,
-      modaoVault,
+      projectVault,
       balances.usdc,
       writeContractAsync,
       refetchBalances,

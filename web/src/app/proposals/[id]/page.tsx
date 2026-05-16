@@ -132,7 +132,7 @@ export default function ProposalDetailPage({
           {markets.isOpen && markets.usdcVault !== "0x0000000000000000000000000000000000000000" && (
             <PositionPanel
               usdcVault={markets.usdcVault}
-              modaoVault={markets.modaoVault}
+              projectVault={markets.projectVault}
             />
           )}
 
@@ -167,7 +167,7 @@ export default function ProposalDetailPage({
                     passAmm: markets.pass.amm,
                     failAmm: markets.fail.amm,
                     usdcVault: markets.usdcVault,
-                    modaoVault: markets.modaoVault,
+                    projectVault: markets.projectVault,
                   }
                 : undefined
             }
@@ -187,7 +187,7 @@ export default function ProposalDetailPage({
                     passAmm: markets.pass.amm,
                     failAmm: markets.fail.amm,
                     usdcVault: markets.usdcVault,
-                    modaoVault: markets.modaoVault,
+                    projectVault: markets.projectVault,
                   }
                 : undefined
             }

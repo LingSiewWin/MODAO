@@ -29,7 +29,7 @@ export interface ProposalMarkets {
   // Vault addresses are needed by the trade flow to wrap real tokens into
   // conditional tokens before swapping. Both are zero address pre-open.
   usdcVault: `0x${string}`;
-  modaoVault: `0x${string}`;
+  projectVault: `0x${string}`;
 }
 
 const EMPTY_SNAPSHOT: MarketSnapshot = {
@@ -50,7 +50,7 @@ const EMPTY_RESULT: ProposalMarkets = {
   pass: EMPTY_SNAPSHOT,
   fail: EMPTY_SNAPSHOT,
   usdcVault: ZERO_ADDR,
-  modaoVault: ZERO_ADDR,
+  projectVault: ZERO_ADDR,
 };
 
 /**
@@ -127,7 +127,7 @@ export function useProposalMarkets(proposalIdRaw: string | bigint | undefined): 
         pass: { ...EMPTY_SNAPSHOT, amm: proposal.passAmm },
         fail: { ...EMPTY_SNAPSHOT, amm: proposal.failAmm },
         usdcVault: proposal.usdcVault,
-        modaoVault: proposal.modaoVault,
+        projectVault: proposal.projectVault,
       };
     }
 
@@ -163,7 +163,7 @@ export function useProposalMarkets(proposalIdRaw: string | bigint | undefined): 
         bids: failLadder.bids,
       },
       usdcVault: proposal.usdcVault,
-      modaoVault: proposal.modaoVault,
+      projectVault: proposal.projectVault,
     };
   }, [enabled, proposal, isOpen, ammReads, loadingProposal, loadingAmms]);
 }

@@ -29,10 +29,10 @@ import { MODAO_DECIMALS, USDC_DECIMALS } from "@/lib/contracts";
  */
 export function PositionPanel({
   usdcVault,
-  modaoVault,
+  projectVault,
 }: {
   usdcVault: Address;
-  modaoVault: Address;
+  projectVault: Address;
 }) {
   const { isConnected } = useAccount();
   const [action, setAction] = useState<VaultAction>("deposit");
@@ -49,7 +49,7 @@ export function PositionPanel({
     isWorking,
     balances,
     outcomes,
-  } = useVaultActions({ usdcVault, modaoVault });
+  } = useVaultActions({ usdcVault, projectVault });
 
   const decimals = side === "usdc" ? USDC_DECIMALS : MODAO_DECIMALS;
   const isFinalized =

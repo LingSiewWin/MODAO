@@ -17,7 +17,9 @@ export const CONTRACTS = {
   modaoToken: "0xb2de502b643fe5cc7781fc8b18493a414dee8afb" as Address,
   mockUsdc: "0xf1c0657bb651d14a64a42daa1381a4615d5e72f5" as Address,
   aiSwarmOracle: "0xaf15a88b7d0cc75bb254662a1abf4d01491fe536" as Address,
-  governor: "0x7992f1590be36dcc78079de75ec796c904461342" as Address,
+  // Redeployed: governor now mints a per-proposal ProjectToken and pairs
+  // pass_PROJECT/pass_USDC instead of pass_MODAO/pass_USDC.
+  governor: "0x89aA2ac89A69603ED0691aC1d1C73eebE8EC650F" as Address,
 } as const;
 
 // ----------------------------------------------------------------------------
@@ -44,7 +46,8 @@ export const governorAbi = [
           { name: "proposer", type: "address" },
           { name: "status", type: "uint8" },
           { name: "outcome", type: "uint8" },
-          { name: "modaoVault", type: "address" },
+          { name: "projectToken", type: "address" },
+          { name: "projectVault", type: "address" },
           { name: "usdcVault", type: "address" },
           { name: "passAmm", type: "address" },
           { name: "failAmm", type: "address" },
@@ -111,7 +114,8 @@ export const governorAbi = [
     name: "MarketsOpened",
     inputs: [
       { name: "proposalId", type: "uint256", indexed: true },
-      { name: "modaoVault", type: "address", indexed: false },
+      { name: "projectToken", type: "address", indexed: false },
+      { name: "projectVault", type: "address", indexed: false },
       { name: "usdcVault", type: "address", indexed: false },
       { name: "passAmm", type: "address", indexed: false },
       { name: "failAmm", type: "address", indexed: false },
@@ -125,6 +129,18 @@ export const governorAbi = [
       { name: "outcome", type: "uint8", indexed: false },
       { name: "passTwap", type: "uint256", indexed: false },
       { name: "failTwap", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "ProjectLaunched",
+    inputs: [
+      { name: "proposalId", type: "uint256", indexed: true },
+      { name: "projectToken", type: "address", indexed: false },
+      { name: "name", type: "string", indexed: false },
+      { name: "symbol", type: "string", indexed: false },
+      { name: "supply", type: "uint256", indexed: false },
+      { name: "descriptionURI", type: "string", indexed: false },
     ],
   },
 ] as const;
@@ -315,7 +331,8 @@ export type OnchainProposal = {
   proposer: Address;
   status: number;
   outcome: number;
-  modaoVault: Address;
+  projectToken: Address;
+  projectVault: Address;
   usdcVault: Address;
   passAmm: Address;
   failAmm: Address;
