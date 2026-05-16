@@ -3,3 +3,4 @@ out/
 broadcast/
 .gas-snapshot
 foundry.lock
+.env
