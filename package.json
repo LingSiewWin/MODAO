@@ -1,0 +1,16 @@
+{
+  "name": "modao",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": [
+    "web",
+    "agents",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "bun --cwd web dev",
+    "dev:agents": "bun --cwd agents dev",
+    "build:contracts": "cd contracts && forge build",
+    "test:contracts": "cd contracts && forge test"
+  }
+}
